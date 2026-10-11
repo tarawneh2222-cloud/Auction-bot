@@ -311,3 +311,144 @@ client.on('messageCreate', async message => {
 });
 
 console.log('✅ نظام الاقتصاد والتصنيف الأسبوعي جاهز!');
+// ==============================================
+// 🏢 نظام العقارات والسوق والمشتريات
+// ==============================================
+
+// قائمة العقارات المتاحة
+const ESTATES = {
+  '🏡': { name: 'شقة سكنية', price: 50000, income: 500 },
+  '🏢': { name: 'مكتب تجاري', price: 150000, income: 1800 },
+  '🏬': { name: 'مركز تسوق', price: 400000, income: 5000 },
+  '🏭': { name: 'مصنع', price: 800000, income: 10000 },
+  '🏰': { name: 'قصر', price: 2000000, income: 25000 },
+  '⛽': { name: 'محطة وقود', price: 250000, income: 3000 },
+  '🏥': { name: 'مستوصف', price: 600000, income: 7500 },
+  '🎡': { name: 'مدينة ملاهي', price: 1200000, income: 18000 },
+  '🚜': { name: 'مزرعة', price: 80000, income: 800 },
+  '⚡': { name: 'محطة طاقة', price: 1500000, income: 22000 }
+};
+
+// قائمة العناصر في السوق
+const MARKET = {
+  '💻': { name: 'تقنية المستقبل', price: 100, change: 0 },
+  '🏦': { name: 'بنك الأمان', price: 50, change: 0 },
+  '🛢️': { name: 'نفط العالم', price: 80, change: 0 },
+  '🍎': { name: 'أغذية يومية', price: 40, change: 0 },
+  '🚗': { name: 'صناعة السيارات', price: 120, change: 0 },
+  '💎': { name: 'ذهب', price: 200, change: 0 }
+};
+
+// أوامر السوق والعقارات
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  loadData();
+  const userId = message.author.id;
+  const player = players[userId];
+  if (!player) return;
+
+  // 🏢 عرض قائمة العقارات
+  if (message.content === '!estates') {
+    let reply = '🏢 **العقارات المتاحة للشراء:**\n\n';
+    for (let key in ESTATES) {
+      const e = ESTATES[key];
+      reply += `${key} **${e.name}** — السعر: ${e.price.toLocaleString()} 💰\n`;
+      reply += `   الدخل كل ساعة: +${e.income} | اكتب: !buy-estate ${key}\n\n`;
+    }
+    message.reply(reply);
+  }
+
+  // 🛒 شراء عقار
+  if (message.content.startsWith('!buy-estate ')) {
+    const key = message.content.split(' ')[1];
+    if (!ESTATES[key]) return message.reply('❌ هذا العقار غير موجود! اكتب !estates لترى القائمة');
+    const estate = ESTATES[key];
+    if (player.balance < estate.price) return message.reply('❌ رصيدك لا يكفي! تحتاج: ' + estate.price);
+    
+    player.balance -= estate.price;
+    if (!player.estates[key]) player.estates[key] = 0;
+    player.estates[key]++;
+    saveData();
+    message.reply(`✅ تم شراء **${estate.name}** بنجاح! 🎉\n💰 خصم من رصيدك: ${estate.price}\n💵 سيدر عليك دخل +${estate.income} كل ساعة!`);
+  }
+
+  // 🏠 عقاراتي
+  if (message.content === '!my-estates') {
+    let reply = '🏠 **عقاراتك الحالية:**\n\n';
+    let hasEstates = false;
+    for (let key in player.estates) {
+      if (player.estates[key] > 0) {
+        hasEstates = true;
+        reply += `${ESTATES[key].name} — العدد: ${player.estates[key]}\n`;
+        reply += `   دخل كل ساعة: +${ESTATES[key].income * player.estates[key]} 💰\n\n`;
+      }
+    }
+    if (!hasEstates) reply += 'لا تمتلك أي عقار حتى الآن! اكتب !estates لترى المتاحة 🛒';
+    message.reply(reply);
+  }
+
+  // 📊 السوق — الأسهم والمعادن
+  if (message.content === '!market') {
+    let reply = '📊 **السوق الحالي:**\n\n';
+    for (let key in MARKET) {
+      const item = MARKET[key];
+      reply += `${key} **${item.name}** — السعر: ${item.price} 💰\n`;
+      reply += `   شراء: !buy ${key} الكمية\n`;
+      reply += `   بيع: !sell ${key} الكمية\n\n`;
+    }
+    message.reply(reply);
+  }
+
+  // 📈 شراء من السوق
+  if (message.content.startsWith('!buy ')) {
+    const parts = message.content.split(' ');
+    const key = parts[1];
+    const qty = parseInt(parts[2]);
+    if (!MARKET[key]) return message.reply('❌ هذا العنصر غير متوفر في السوق! اكتب !market');
+    if (isNaN(qty) || qty <= 0) return message.reply('❌ استخدم: !buy الرمز الكمية\nمثال: !buy 💎 10');
+    
+    const totalCost = MARKET[key].price * qty;
+    if (player.balance < totalCost) return message.reply(`❌ رصيدك لا يكفي! التكلفة: ${totalCost} 💰`);
+    
+    player.balance -= totalCost;
+    if (!player.portfolio[key]) player.portfolio[key] = 0;
+    player.portfolio[key] += qty;
+    saveData();
+    message.reply(`✅ تم شراء ${qty} × ${MARKET[key].name} بـ ${totalCost} 💰\n📂 موجودة في محفظتك الآن!`);
+  }
+
+  // 📉 بيع في السوق
+  if (message.content.startsWith('!sell ')) {
+    const parts = message.content.split(' ');
+    const key = parts[1];
+    const qty = parseInt(parts[2]);
+    if (!MARKET[key]) return message.reply('❌ هذا العنصر غير متوفر!');
+    if (!player.portfolio[key] || player.portfolio[key] < qty) return message.reply('❌ لا تمتلك كمية كافية للبيع!');
+    
+    const totalSale = MARKET[key].price * qty;
+    player.balance += totalSale;
+    player.portfolio[key] -= qty;
+    if (player.portfolio[key] === 0) delete player.portfolio[key];
+    saveData();
+    message.reply(`✅ تم بيع ${qty} × ${MARKET[key].name} بـ ${totalSale} 💰\n💵 أضيفت إلى رصيدك بنجاح!`);
+  }
+
+  // 📂 محفظتي
+  if (message.content === '!portfolio') {
+    let reply = '📂 **محفظتك الاستثمارية:**\n\n';
+    let hasItems = false;
+    for (let key in player.portfolio) {
+      if (player.portfolio[key] > 0) {
+        hasItems = true;
+        const item = MARKET[key];
+        const value = player.portfolio[key] * item.price;
+        reply += `${key} ${item.name} — العدد: ${player.portfolio[key]}\n`;
+        reply += `   القيمة الحالية: ${value.toLocaleString()} 💰\n\n`;
+      }
+    }
+    if (!hasItems) reply += 'محفظتك فارغة حالياً! اكتب !market لترى ما يمكنك شراؤه 🛒';
+    message.reply(reply);
+  }
+});
+
+console.log('✅ نظام العقارات والسوق جاهز!');
