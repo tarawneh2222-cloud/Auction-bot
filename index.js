@@ -452,3 +452,251 @@ client.on('messageCreate', async message => {
 });
 
 console.log('✅ نظام العقارات والسوق جاهز!');
+// ==============================================
+// 📖 نظام الأوامر العربية الكاملة
+// ==============================================
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  loadData();
+  const userId = message.author.id;
+  const username = message.author.username;
+  initPlayer(userId, username);
+  const player = players[userId];
+
+  // 📋 قائمة المساعدة الشاملة
+  if (message.content === '!مساعدة') {
+    message.reply(`
+📖 **قائمة جميع الأوامر:**
+
+👤 **الملف الشخصي:**
+!ملفي — عرض رصيدك وثروتك
+!راتبي — راتب يومي +100 عملة
+!لقبى — لقبك الحالي
+!الاغنى — قائمة أغنى اللاعبين 👑
+
+🏦 **البنك والتحويلات:**
+!ايداع مبلغ — إيداع في البنك
+!سحب مبلغ — سحب من البنك
+!تحويل @شخص مبلغ — تحويل عملات
+
+🏢 **العقارات:**
+!العقارات — قائمة العقارات المتاحة
+!شراء-عقار الرمز — شراء عقار
+!عقاراتي — عقاراتك ودخلك منها
+
+📊 **السوق والاستثمار:**
+!السوق — أسعار السوق الحالية
+!شراء الرمز الكمية — شراء من السوق
+!بيع الرمز الكمية — بيع أصولك
+!محفظتي — أصولك واستثماراتك
+
+📢 **المزادات:**
+!ابدأ — بدء مزاد جديد
+!زايد المبلغ — تقديم عرض سعر
+
+💡 مثال: !شراء 💎 5   !ايداع 1000   !زايد 500
+    `);
+  }
+
+  // 👤 الملف الشخصي
+  if (message.content === '!ملفي') {
+    const wealth = calculateWealth(player);
+    message.reply(`
+📊 **ملفك الشخصي:**
+👤 الاسم: ${player.username}
+🏅 لقبك: ${player.title}
+💵 النقدي: ${player.balance.toLocaleString()}
+🏦 في البنك: ${player.bank.toLocaleString()}
+💰 ثروتك الإجمالية: ${wealth.toLocaleString()}
+    `);
+  }
+
+  // 📅 الراتب اليومي
+  if (message.content === '!راتبي') {
+    const now = Date.now();
+    if (now - player.lastDaily < 86400000) {
+      return message.reply('⏳ لقد استلمت راتبك اليوم بالفعل! عد غداً ✅');
+    }
+    player.lastDaily = now;
+    player.balance += 100;
+    saveData();
+    message.reply('✅ حصلت على راتبك اليومي: +100 عملة! رصيدك: ' + player.balance);
+  }
+
+  // 🏅 لقبي
+  if (message.content === '!لقبى') {
+    message.reply(`🏅 لقبك الحالي: **${player.title}**\n📌 ساري المفعول حتى نهاية الأسبوع ✅`);
+  }
+
+  // 👑 قائمة الأغنياء
+  if (message.content === '!الاغنى') {
+    const ranking = updateWeeklyRanking();
+    if (ranking.length === 0) return message.reply('📊 لا بيانات حتى الآن!');
+    let reply = '🏆 **قائمة أغنى اللاعبين هذا الأسبوع:**\n\n';
+    ranking.forEach((p, i) => {
+      let medal = '';
+      if (i === 0) medal = '🥇';
+      else if (i === 1) medal = '🥈';
+      else if (i === 2) medal = '🥉';
+      else medal = `#${i+1}`;
+      reply += `${medal} ${p.username} — ${p.wealth.toLocaleString()} 💰\n`;
+    });
+    reply += '\n🔄 يتم التحديث تلقائياً كل أسبوع!';
+    message.reply(reply);
+  }
+
+  // 🏦 إيداع
+  if (message.content.startsWith('!ايداع ')) {
+    const amount = parseInt(message.content.split(' ')[1]);
+    if (isNaN(amount) || amount <= 0 || amount > player.balance) {
+      return message.reply('❌ مبلغ غير صالح!');
+    }
+    player.balance -= amount;
+    player.bank += amount;
+    saveData();
+    message.reply(`✅ تم إيداع ${amount} في حسابك البنكي!`);
+  }
+
+  // 💵 سحب
+  if (message.content.startsWith('!سحب ')) {
+    const amount = parseInt(message.content.split(' ')[1]);
+    if (isNaN(amount) || amount <= 0 || amount > player.bank) {
+      return message.reply('❌ مبلغ غير صالح!');
+    }
+    player.bank -= amount;
+    player.balance += amount;
+    saveData();
+    message.reply(`✅ تم سحب ${amount} من حسابك البنكي!`);
+  }
+
+  // 💸 تحويل
+  if (message.content.startsWith('!تحويل ')) {
+    const match = message.content.match(/!تحويل <@!?(\d+)> (\d+)/);
+    if (!match) return message.reply('❌ استخدم: !تحويل @الشخص المبلغ');
+    const targetId = match[1];
+    const amount = parseInt(match[2]);
+    if (!players[targetId]) return message.reply('❌ هذا اللاعب غير مسجل!');
+    if (amount > player.balance || amount <= 0) return message.reply('❌ رصيدك لا يكفي!');
+    player.balance -= amount;
+    players[targetId].balance += amount;
+    saveData();
+    message.reply(`✅ تم تحويل ${amount} عملة بنجاح! 💸`);
+  }
+
+  // 🏢 قائمة العقارات
+  if (message.content === '!العقارات') {
+    let reply = '🏢 **العقارات المتاحة للشراء:**\n\n';
+    for (let key in ESTATES) {
+      const e = ESTATES[key];
+      reply += `${key} **${e.name}** — السعر: ${e.price.toLocaleString()} 💰\n`;
+      reply += `   الدخل كل ساعة: +${e.income} | اكتب: !شراء-عقار ${key}\n\n`;
+    }
+    message.reply(reply);
+  }
+
+  // 🏠 شراء عقار
+  if (message.content.startsWith('!شراء-عقار ')) {
+    const key = message.content.split(' ')[1];
+    if (!ESTATES[key]) return message.reply('❌ هذا العقار غير موجود! اكتب !العقارات لترى القائمة');
+    const estate = ESTATES[key];
+    if (player.balance < estate.price) return message.reply('❌ رصيدك لا يكفي! تحتاج: ' + estate.price);
+    
+    player.balance -= estate.price;
+    if (!player.estates[key]) player.estates[key] = 0;
+    player.estates[key]++;
+    saveData();
+    message.reply(`✅ تم شراء **${estate.name}** بنجاح! 🎉\n💰 خصم من رصيدك: ${estate.price}\n💵 سيدر عليك دخل +${estate.income} كل ساعة!`);
+  }
+
+  // 🏠 عقاراتي
+  if (message.content === '!عقاراتي') {
+    let reply = '🏠 **عقاراتك الحالية:**\n\n';
+    let hasEstates = false;
+    for (let key in player.estates) {
+      if (player.estates[key] > 0) {
+        hasEstates = true;
+        reply += `${ESTATES[key].name} — العدد: ${player.estates[key]}\n`;
+        reply += `   دخل كل ساعة: +${ESTATES[key].income * player.estates[key]} 💰\n\n`;
+      }
+    }
+    if (!hasEstates) reply += 'لا تمتلك أي عقار حتى الآن! اكتب !العقارات لترى المتاحة 🛒';
+    message.reply(reply);
+  }
+
+  // 📊 السوق
+  if (message.content === '!السوق') {
+    let reply = '📊 **السوق الحالي — الأسعار:**\n\n';
+    for (let key in MARKET) {
+      const item = MARKET[key];
+      reply += `${key} **${item.name}** — السعر: ${item.price} 💰\n`;
+      reply += `   شراء: !شراء ${key} الكمية\n`;
+      reply += `   بيع: !بيع ${key} الكمية\n\n`;
+    }
+    message.reply(reply);
+  }
+
+  // 📈 شراء من السوق
+  if (message.content.startsWith('!شراء ')) {
+    const parts = message.content.split(' ');
+    const key = parts[1];
+    const qty = parseInt(parts[2]);
+    if (!MARKET[key]) return message.reply('❌ هذا العنصر غير متوفر! اكتب !السوق');
+    if (isNaN(qty) || qty <= 0) return message.reply('❌ استخدم: !شراء الرمز الكمية\nمثال: !شراء 💎 10');
+    
+    const totalCost = MARKET[key].price * qty;
+    if (player.balance < totalCost) return message.reply(`❌ رصيدك لا يكفي! التكلفة: ${totalCost} 💰`);
+    
+    player.balance -= totalCost;
+    if (!player.portfolio[key]) player.portfolio[key] = 0;
+    player.portfolio[key] += qty;
+    saveData();
+    message.reply(`✅ تم شراء ${qty} × ${MARKET[key].name} بـ ${totalCost} 💰\n📂 أضيفت لمحفظتك!`);
+  }
+
+  // 📉 بيع من السوق
+  if (message.content.startsWith('!بيع ')) {
+    const parts = message.content.split(' ');
+    const key = parts[1];
+    const qty = parseInt(parts[2]);
+    if (!MARKET[key]) return message.reply('❌ هذا العنصر غير متوفر!');
+    if (!player.portfolio[key] || player.portfolio[key] < qty) return message.reply('❌ لا تمتلك كمية كافية للبيع!');
+    
+    const totalSale = MARKET[key].price * qty;
+    player.balance += totalSale;
+    player.portfolio[key] -= qty;
+    if (player.portfolio[key] === 0) delete player.portfolio[key];
+    saveData();
+    message.reply(`✅ تم بيع ${qty} × ${MARKET[key].name} بـ ${totalSale} 💰\n💵 أضيفت إلى رصيدك!`);
+  }
+
+  // 📂 محفظتي
+  if (message.content === '!محفظتي') {
+    let reply = '📂 **محفظتك الاستثمارية:**\n\n';
+    let hasItems = false;
+    for (let key in player.portfolio) {
+      if (player.portfolio[key] > 0) {
+        hasItems = true;
+        const item = MARKET[key];
+        const value = player.portfolio[key] * item.price;
+        reply += `${key} ${item.name} — العدد: ${player.portfolio[key]}\n`;
+        reply += `   القيمة الحالية: ${value.toLocaleString()} 💰\n\n`;
+      }
+    }
+    if (!hasItems) reply += 'محفظتك فارغة حالياً! اكتب !السوق لترى ما يمكنك شراؤه 🛒';
+    message.reply(reply);
+  }
+
+  // 📢 بدء مزاد
+  if (message.content === '!ابدأ') {
+    message.reply('📢 بدأ المزاد! اكتب !زايد المبلغ لتقديم عرضك ⚡');
+  }
+
+  // ⚡ المزايدة
+  if (message.content.startsWith('!زايد ')) {
+    const amount = message.content.split(' ')[1];
+    message.reply(`✅ تم تسجيل عرضك: ${amount} 💰`);
+  }
+});
+
+console.log('✅ نظام الأوامر العربية جاهز! اكتب !مساعدة لترى القائمة 📋');
