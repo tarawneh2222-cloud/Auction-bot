@@ -115,4 +115,17 @@ const server = http.createServer((req, res) => {
   res.end('Bot is running!');
 });
 server.listen(3000, () => console.log('✅ Health check server running on port 3000'));
+// التعامل مع الأوامر النصية
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  if (message.content.startsWith('!start')) {
+    message.reply('✅ تم بدء المزاد! اكتب !bid [المبلغ] لتقديم عرضك');
+  }
+
+  if (message.content.startsWith('!bid ')) {
+    const amount = message.content.split(' ')[1];
+    message.reply(`✅ تم تسجيل عرضك بمبلغ: ${amount}`);
+  }
+})
 
