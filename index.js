@@ -129,3 +129,185 @@ client.on('messageCreate', async message => {
   }
 })
 
+// ==============================================
+// 🏦 لعبة الإمبراطورية الاقتصادية — الإصدار الكامل
+// ==============================================
+
+const fs = require('fs');
+
+// تخزين بيانات اللاعبين
+let players = {};
+let weeklyRanking = {};
+
+// تحميل البيانات
+function loadData() {
+  try {
+    const data = fs.readFileSync('economy_data.json', 'utf8');
+    players = JSON.parse(data);
+  } catch {
+    players = {};
+  }
+}
+
+// حفظ البيانات
+function saveData() {
+  fs.writeFileSync('economy_data.json', JSON.stringify(players, null, 2));
+}
+
+// تهيئة اللاعب الجديد
+function initPlayer(userId, username) {
+  if (!players[userId]) {
+    players[userId] = {
+      username: username,
+      balance: 50000,
+      bank: 0,
+      portfolio: {},
+      estates: {},
+      treasures: {},
+      certificates: {},
+      title: 'مستثمر جديد',
+      titleExpiry: 0,
+      lastDaily: 0,
+      totalWealth: 50000
+    };
+    saveData();
+  }
+}
+
+// حساب الثروة الإجمالية
+function calculateWealth(player) {
+  let total = player.balance + player.bank;
+  // قيمة العقارات
+  const estateValues = {
+    '🏡': 50000, '🏢': 150000, '🏬': 400000, '🏭': 800000,
+    '🏰': 2000000, '⛽': 250000, '🏥': 600000, '🎡': 1200000,
+    '🚜': 80000, '⚡': 1500000
+  };
+  for (let key in player.estates) {
+    total += (estateValues[key] || 0) * player.estates[key];
+  }
+  return total;
+}
+
+// تحديث التصنيف الأسبوعي
+function updateWeeklyRanking() {
+  const sorted = Object.entries(players)
+    .map(([id, p]) => ({ id, username: p.username, wealth: calculateWealth(p) }))
+    .sort((a, b) => b.wealth - a.wealth)
+    .slice(0, 10);
+  
+  weeklyRanking = sorted;
+  
+  // منح الألقاب
+  if (sorted[0] && players[sorted[0].id]) {
+    players[sorted[0].id].title = '👑 إمبراطور الاقتصاد 👑';
+    players[sorted[0].id].titleBonus = 0.05;
+  }
+  if (sorted[1] && players[sorted[1].id]) {
+    players[sorted[1].id].title = '💼 ملياردير';
+    players[sorted[1].id].titleBonus = 0.02;
+  }
+  if (sorted[2] && players[sorted[2].id]) {
+    players[sorted[2].id].title = '💰 رجل أعمال';
+    players[sorted[2].id].titleBonus = 0;
+  }
+  saveData();
+  return sorted;
+}
+
+// التعامل مع الأوامر
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  loadData();
+  const userId = message.author.id;
+  const username = message.author.username;
+  initPlayer(userId, username);
+  const player = players[userId];
+
+  // 💰 رصيدي
+  if (message.content === '!me') {
+    const wealth = calculateWealth(player);
+    message.reply(`
+📊 **ملفك الشخصي:**
+👤 الاسم: ${player.username}
+🏅 لقبك: ${player.title}
+💵 النقدي: ${player.balance.toLocaleString()}
+🏦 في البنك: ${player.bank.toLocaleString()}
+💰 ثروتك الإجمالية: ${wealth.toLocaleString()}
+    `);
+  }
+
+  // 📅 راتب يومي
+  if (message.content === '!daily') {
+    const now = Date.now();
+    if (now - player.lastDaily < 86400000) {
+      return message.reply('⏳ لقد استلمت راتبك اليوم بالفعل! عد غداً ✅');
+    }
+    player.lastDaily = now;
+    player.balance += 100;
+    saveData();
+    message.reply('✅ حصلت على راتبك اليومي: +100 عملة! رصيدك: ' + player.balance);
+  }
+
+  // 🏦 إيداع
+  if (message.content.startsWith('!deposit ')) {
+    const amount = parseInt(message.content.split(' ')[1]);
+    if (isNaN(amount) || amount <= 0 || amount > player.balance) {
+      return message.reply('❌ مبلغ غير صالح!');
+    }
+    player.balance -= amount;
+    player.bank += amount;
+    saveData();
+    message.reply(`✅ تم إيداع ${amount} في حسابك البنكي!`);
+  }
+
+  // 💵 سحب
+  if (message.content.startsWith('!withdraw ')) {
+    const amount = parseInt(message.content.split(' ')[1]);
+    if (isNaN(amount) || amount <= 0 || amount > player.bank) {
+      return message.reply('❌ مبلغ غير صالح!');
+    }
+    player.bank -= amount;
+    player.balance += amount;
+    saveData();
+    message.reply(`✅ تم سحب ${amount} من حسابك البنكي!`);
+  }
+
+  // 📈 قائمة الأغنياء
+  if (message.content === '!top') {
+    const ranking = updateWeeklyRanking();
+    if (ranking.length === 0) return message.reply('📊 لا بيانات حتى الآن!');
+    let reply = '🏆 **قائمة أغنى اللاعبين هذا الأسبوع:**\n';
+    ranking.forEach((p, i) => {
+      let medal = '';
+      if (i === 0) medal = '🥇';
+      else if (i === 1) medal = '🥈';
+      else if (i === 2) medal = '🥉';
+      else medal = `#${i+1}`;
+      reply += `${medal} ${p.username} — ${p.wealth.toLocaleString()} 💰\n`;
+    });
+    reply += '\n🔄 يتم تحديث التصنيف تلقائياً كل أسبوع!';
+    message.reply(reply);
+  }
+
+  // 🏅 لقبي
+  if (message.content === '!mytitle') {
+    message.reply(`🏅 لقبك الحالي: **${player.title}**\n📌 هذا اللقب ساري المفعول حتى نهاية الأسبوع ✅`);
+  }
+
+  // 💸 تحويل
+  if (message.content.startsWith('!pay ')) {
+    const match = message.content.match(/!pay <@!?(\d+)> (\d+)/);
+    if (!match) return message.reply('❌ استخدم: !pay @الشخص المبلغ');
+    const targetId = match[1];
+    const amount = parseInt(match[2]);
+    if (!players[targetId]) return message.reply('❌ هذا اللاعب غير مسجل!');
+    if (amount > player.balance || amount <= 0) return message.reply('❌ رصيدك لا يكفي!');
+    player.balance -= amount;
+    players[targetId].balance += amount;
+    saveData();
+    message.reply(`✅ تم تحويل ${amount} عملة للاعب بنجاح! 💸`);
+  }
+});
+
+console.log('✅ نظام الاقتصاد والتصنيف الأسبوعي جاهز!');
