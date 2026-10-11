@@ -108,4 +108,11 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);// Keep Render happy
+const http = require('http');
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot is running!');
+});
+server.listen(3000, () => console.log('✅ Health check server running on port 3000'));
+
