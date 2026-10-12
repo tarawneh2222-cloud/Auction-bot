@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, EmbedBuilder } = require('discord.js');
 const token = process.env.TOKEN;
 
 const client = new Client({
@@ -12,13 +12,18 @@ const client = new Client({
 
 const users = new Map();
 
+// 📋 العقارات من الصورة مباشرة
 const estates = [
-  { id: 'house_small', name: '🏡 منزل صغير', price: 10000, income: 100, desc: 'منزل مريح لبداية الطريق نحو الثروة' },
-  { id: 'house_big', name: '🏠 منزل كبير', price: 50000, income: 600, desc: 'مساحة واسعة وعائلة سعيدة' },
-  { id: 'apartment', name: '🏢 شقة فاخرة', price: 150000, income: 2000, desc: 'إطلالة رائعة في قلب المدينة' },
-  { id: 'villa', name: '🏘️ فيلا', price: 500000, income: 8000, desc: 'مساحتك الخاصة مع حديقة ومسبح' },
-  { id: 'tower', name: '🗼 برج سكني', price: 2000000, income: 35000, desc: 'أنت مالك البرج! دخل ثابت كل يوم' },
-  { id: 'island', name: '🏝️ جزيرة خاصة', price: 10000000, income: 200000, desc: 'قمة النجاح! جزيرتك الخاصة في المحيط' },
+  { id: 'farm', name: '🚜 مزرعة', price: 80000, income: 800, desc: 'بداية رائعة لبناء ثروتك من الأرض' },
+  { id: 'office', name: '🏢 مكتب تجاري', price: 150000, income: 500, desc: 'مكان احترافي لأعمالك الناشئة' },
+  { id: 'shopping', name: '🏬 مركز تسوق', price: 400000, income: 1800, desc: 'يومياً يزداد زوارك وأرباحك' },
+  { id: 'factory', name: '🏭 مصنع', price: 800000, income: 5000, desc: 'إنتاج مستمر وأرباح تنمو بثبات' },
+  { id: 'gasstation', name: '⛽ محطة وقود', price: 250000, income: 3000, desc: 'حركة لا تتوقف وأرباح يومية' },
+  { id: 'hospital', name: '🏥 مستوصف', price: 600000, income: 7500, desc: 'خدمة وأرباح ومكانة في المجتمع' },
+  { id: 'themepark', name: '🎡 مدينة ملاهي', price: 1200000, income: 18000, desc: 'فرح الناس = نمو أرباحك' },
+  { id: 'palace', name: '🏰 قصر', price: 2000000, income: 25000, desc: 'رمز النجاح والفخامة' },
+  { id: 'powerplant', name: '⚡ محطة طاقة', price: 1500000, income: 22000, desc: 'الجميع يحتاجك دائماً' },
+  { id: 'tower', name: '🗼 برج إداري', price: 1800000, income: 10000, desc: 'أعلى وأكثر إشراقاً في المدينة' },
 ];
 
 const marketItems = [
@@ -36,7 +41,6 @@ function initUser(userId, username) {
       name: username,
       balance: 5000,
       bank: 0,
-      dailyUsed: false,
       lastDaily: 0,
       estates: [],
       portfolio: [],
@@ -47,9 +51,12 @@ function initUser(userId, username) {
 
 function getTotalWealth(user) {
   let total = user.balance + user.bank;
-  user.estates.forEach(e => total += estates.find(es => es.id === e)?.price || 0);
+  user.estates.forEach(eId => {
+    const e = estates.find(x => x.id === eId);
+    if (e) total += e.price;
+  });
   user.portfolio.forEach(p => {
-    const item = marketItems.find(m => m.id === p.id);
+    const item = marketItems.find(i => i.id === p.id);
     if (item) total += item.price * p.quantity;
   });
   return total;
@@ -60,6 +67,7 @@ client.on('ready', () => {
   client.user.setActivity('إمبراطورية الثروة | !help', { type: 3 });
 });
 
+// معالجة الأزرار
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
 
@@ -77,7 +85,10 @@ client.on(Events.InteractionCreate, async interaction => {
     
     if (user.balance < estate.price) {
       const need = estate.price - user.balance;
-      return interaction.reply({ content: `❌ رصيدك غير كافٍ! تحتاج **${need.toLocaleString()}** عملة إضافية.`, ephemeral: true });
+      return interaction.reply({ 
+        content: `❌ رصيدك غير كافٍ!\n💰 السعر: **${estate.price.toLocaleString()}** عملة\n💵 معك: **${user.balance.toLocaleString()}** عملة\n📉 تحتاج فقط: **${need.toLocaleString()}** عملة إضافية`, 
+        ephemeral: true 
+      });
     }
     
     user.balance -= estate.price;
@@ -86,8 +97,8 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.reply({
       embeds: [new EmbedBuilder()
         .setColor('#2ecc71')
-        .setTitle('✅ تم الشراء بنجاح!')
-        .setDescription(`🎉 تهانيناً! لقد اشتريت:\n**${estate.name}**\n\n💰 السعر: ${estate.price.toLocaleString()} عملة\n📈 دخل يومي: +${estate.income.toLocaleString()} عملة\n\nسيتم إضافة الدخل تلقائياً عند استلام راتبك اليومي!`)
+        .setTitle('✅ تم الشراء بنجاح! 🎉')
+        .setDescription(`تهانيناً! أصبحت مالك لـ:\n\n**${estate.name}**\n💰 السعر: **${estate.price.toLocaleString()}** عملة\n📈 دخل يومي: +**${estate.income.toLocaleString()}** عملة\n📝 ${estate.desc}\n\nسيتم إضافة الدخل تلقائياً عند استلام راتبك اليومي!`)
         .setTimestamp()
       ]
     });
@@ -98,8 +109,11 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!item) return interaction.reply({ content: '❌ العنصر غير متاح!', ephemeral: true });
     
     if (user.balance < item.price) {
-      const need = item.price - item.price;
-      return interaction.reply({ content: `❌ رصيدك غير كافٍ! تحتاج **${need.toLocaleString()}** عملة إضافية.`, ephemeral: true });
+      const need = item.price - user.balance;
+      return interaction.reply({ 
+        content: `❌ رصيدك غير كافٍ! تحتاج **${need.toLocaleString()}** عملة إضافية.`, 
+        ephemeral: true 
+      });
     }
     
     user.balance -= item.price;
@@ -110,8 +124,8 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.reply({
       embeds: [new EmbedBuilder()
         .setColor('#2ecc71')
-        .setTitle('✅ تم الشراء بنجاح!')
-        .setDescription(`🎉 اشتريت: **${item.name}**\n💰 السعر: ${item.price.toLocaleString()} عملة`)
+        .setTitle('✅ تم الشراء بنجاح! 🎉')
+        .setDescription(`🎉 اشتريت: **${item.name}**\n💰 السعر: **${item.price.toLocaleString()}** عملة`)
         .setTimestamp()
       ]
     });
@@ -133,12 +147,12 @@ client.on('messageCreate', async message => {
         { name: '👤 حسابك', value: '`!me` — عرض ملفك الشخصي ورصيدك' },
         { name: '💰 دخل يومي', value: '`!daily` — استلام راتبك اليومي + دخل عقاراتك' },
         { name: '🏦 البنك', value: '`!deposit مبلغ` — إيداع في البنك\n`!withdraw مبلغ` — سحب من البنك' },
-        { name: '🏠 العقارات', value: '`!estates` — عرض العقارات المتاحة للشراء' },
+        { name: '🏠 العقارات', value: '`!estates` — عرض العقارات المتاحة (اضغط الزر بجانب العنصر للشراء!)' },
         { name: '📦 ممتلكاتك', value: '`!my-estates` — عرض عقاراتك الحالية\n`!portfolio` — محفظتك الاستثمارية' },
         { name: '🛒 السوق', value: '`!market` — سلع استثمارية للشراء' },
-        { name: '🏆 التصنيف الأسبوعي', value: '`!top` — قائمة أغنى اللاعبين والألقاب الأسبوعية' },
+        { name: '🏆 التصنيف الأسبوعي', value: '`!top` — قائمة أغنى اللاعبين والألقاب' },
       )
-      .setFooter({ text: '💡 نصيحة: كل عنصر بجانبه زر شراء مباشر ✅' });
+      .setFooter({ text: '💡 نصيحة: كل عنصر بجانبه زر شراء مباشر — فقط اضغط عليه! 🛒' });
     message.channel.send({ embeds: [embed] });
   }
 
@@ -155,8 +169,8 @@ client.on('messageCreate', async message => {
         { name: '💰 في يدك', value: `${user.balance.toLocaleString()} عملة`, inline: true },
         { name: '🏦 في البنك', value: `${user.bank.toLocaleString()} عملة`, inline: true },
         { name: '📊 ثروة إجمالية', value: `${getTotalWealth(user).toLocaleString()} عملة`, inline: true },
-        { name: '🏠 عقاراتك', value: user.estates.length > 0 ? user.estates.map(e => estates.find(x => x.id === e)?.name).join('\n') : 'لا تمتلك أي عقار بعد', inline: true },
-        { name: '📈 دخل يومي إضافي', value: `+${totalIncome.toLocaleString()} عملة من عقاراتك`, inline: true },
+        { name: '🏠 عدد عقاراتك', value: `${user.estates.length} من أصل ${estates.length}`, inline: true },
+        { name: '📈 دخل يومي إضافي', value: `+${totalIncome.toLocaleString()} عملة`, inline: true },
       )
       .setTimestamp();
     message.channel.send({ embeds: [embed] });
@@ -215,7 +229,7 @@ client.on('messageCreate', async message => {
       const owned = user.estates.includes(estate.id);
       embed.addFields({
         name: estate.name,
-        value: `💰 السعر: **${estate.price.toLocaleString()}** عملة\n📈 دخل يومي: +${estate.income.toLocaleString()}\n📝 ${estate.desc}`,
+        value: `💰 السعر: **${estate.price.toLocaleString()}** عملة\n📈 دخل يومي: +**${estate.income.toLocaleString()}** عملة\n📝 ${estate.desc}`,
         inline: false
       });
       
@@ -245,13 +259,13 @@ client.on('messageCreate', async message => {
     }
     const list = user.estates.map(eId => {
       const e = estates.find(x => x.id === eId);
-      return `${e.name} — دخل يومي: +${e.income.toLocaleString()}`;
+      return `${e.name} — دخل يومي: +${e.income.toLocaleString()} عملة`;
     }).join('\n');
     const totalIncome = user.estates.reduce((sum, eId) => {
       const e = estates.find(x => x.id === eId);
       return sum + (e?.income || 0);
     }, 0);
-    message.channel.send(`🏠 **عقاراتك:**\n${list}\n\n📊 **مجموع الدخل اليومي من العقارات: +${totalIncome.toLocaleString()} عملة**`);
+    message.channel.send(`🏠 **عقاراتك:**\n${list}\n\n📊 **مجموع الدخل اليومي: +${totalIncome.toLocaleString()} عملة**`);
   }
 
   else if (content === `${prefix}market`) {
@@ -304,9 +318,9 @@ client.on('messageCreate', async message => {
     let desc = '';
     allUsers.forEach((p, i) => {
       let badge = '';
-      if (i === 0) badge = '👑 الأغنى — لقب: 🟢 الإمبراطور';
-      else if (i === 1) badge = '🥈 الثاني — لقب: 🟡 الملياردير';
-      else if (i === 2) badge = '🥉 الثالث — لقب: 🔵 رائد الأعمال';
+      if (i === 0) badge = '👑 الإمبراطور';
+      else if (i === 1) badge = '🥈 الملياردير';
+      else if (i === 2) badge = '🥉 رائد الأعمال';
       desc += `${i+1}. ${p.name} — **${p.wealth.toLocaleString()}** عملة ${badge}\n`;
     });
     
