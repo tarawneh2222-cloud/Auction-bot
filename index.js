@@ -287,6 +287,248 @@ ${found.name}
     saveData();
   }
 });
+// ==============================================
+// 🎮 الألعاب الإضافية
+// ==============================================
+const gameCooldowns = new Map();
+
+function getCooldown(key, id, ms) {
+  const now = Date.now();
+  const fullKey = `${key}_${id}`;
+  if (gameCooldowns.get(fullKey) && now - gameCooldowns.get(fullKey) < ms) {
+    return Math.ceil((ms - (now - gameCooldowns.get(fullKey))) / 1000);
+  }
+  gameCooldowns.set(fullKey, now);
+  return 0;
+}
+
+// 🏎️ سباق السيارات
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const cmd = args.shift().toLowerCase();
+  const userId = message.author.id;
+
+  if (cmd === 'سباق') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const cd = getCooldown('race', userId, 120000);
+    if (cd > 0) return message.reply(`⏳ انتظر ${cd} ثانية قبل سباق آخر!`);
+
+    const cars = ['🏎️', '🚗', '🚙', '🚕', '🏁'];
+    const players = [
+      { name: message.author.username, emoji: cars[Math.floor(Math.random()*cars.length)], pos: 0 }
+    ];
+    
+    message.reply(`🏁 بدأ السباق! سأبدأ أنا أولاً...\nاكتب **!انضم** خلال 15 ثانية للمشاركة!`);
+    
+    const waitMsg = message;
+    const joinCollector = message.channel.createMessageCollector({ 
+      filter: m => m.content === '!انضم' && !m.author.bot,
+      time: 15000
+    });
+    
+    joinCollector.on('collect', m => {
+      if (!users.has(m.author.id)) return;
+      players.push({ name: m.author.username, emoji: cars[Math.floor(Math.random()*cars.length)], pos: 0 });
+      m.reply(`✅ انضم ${m.author.username} للسباق!`);
+    });
+    
+    joinCollector.on('end', async () => {
+      if (players.length < 2) {
+        return message.channel.send('⏳ لم ينضم عدد كافٍ من اللاعبين! ابدأ سباقاً جديداً.');
+      }
+      
+      message.channel.send(`🏁 السباق يبدأ بـ ${players.length} متسابقين!`);
+      const goal = 15;
+      let winner = null;
+      
+      while (!winner) {
+        let display = '';
+        for (const p of players) {
+          const move = Math.random() > 0.3 ? Math.floor(Math.random()*3)+1 : 0;
+          p.pos = Math.min(goal, p.pos + move);
+          const track = '█'.repeat(p.pos) + '░'.repeat(goal - p.pos);
+          display += `${p.emoji} ${p.name}\n${track} ${p.pos}/${goal}\n\n`;
+          if (p.pos >= goal && !winner) winner = p;
+        }
+        const m = await message.channel.send(display);
+        await new Promise(r => setTimeout(r, 700));
+        await m.delete().catch(()=>{});
+      }
+      
+      const prize = players.length * 100;
+      const winnerId = players.find(p => p.name === winner.name)?.id || userId;
+      if (!users.has(winnerId)) users.set(winnerId, { balance: 0 });
+      users.get(winnerId).balance += prize;
+      
+      message.channel.send(`🏆 فاز **${winner.emoji} ${winner.name}**!\n💰 الجائزة: +${prize} 💵`);
+      saveData();
+    });
+  }
+
+  // 🗺️ البحث عن الكنز
+  if (cmd === 'كنز') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const cd = getCooldown('treasure', userId, 1800000);
+    if (cd > 0) return message.reply(`⏳ عُد بعد ${Math.ceil(cd/60)} دقيقة!`);
+
+    const areas = ['🌲 الغابة', '🕳️ الكهف', '🌊 النهر', '⛰️ القمة'];
+    const correct = Math.floor(Math.random() * 4);
+    let attempts = 3;
+    
+    message.reply(`🗺️ اختر منطقة للبحث:\n1️⃣ ${areas[0]}\n2️⃣ ${areas[1]}\n3️⃣ ${areas[2]}\n4️⃣ ${areas[3]}\n\nاكتب الرقم! لديك 3 محاولات`);
+    
+    const filter = m => m.author.id === userId && /^[1-4]$/.test(m.content);
+    const collector = message.channel.createMessageCollector({ filter, time: 60000 });
+    
+    collector.on('collect', m => {
+      const choice = parseInt(m.content) - 1;
+      attempts--;
+      
+      if (choice === correct) {
+        collector.stop();
+        const prize = Math.random() > 0.8 ? 3000 : Math.random() > 0.5 ? 800 : 150;
+        const u = users.get(userId);
+        u.balance += prize;
+        saveData();
+        m.reply(`💎 وجدت الكنز في **${areas[choice]}**!\n💰 ربح: +${prize} 💵`);
+      } else if (attempts > 0) {
+        m.reply(`🔍 لا يوجد شيء هنا! تبقى ${attempts} محاولات`);
+      } else {
+        collector.stop();
+        m.reply(`😔 انتهت المحاولات! الكنز كان في **${areas[correct]}**`);
+      }
+    });
+  }
+
+  // 🏷️ تخمين السعر
+  if (cmd === 'سعر') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const cd = getCooldown('price', userId, 60000);
+    if (cd > 0) return message.reply(`⏳ انتظر ${cd} ثانية!`);
+
+    const items = [
+      { name: 'ساعة ذكية ⌚', min: 100, max: 500 },
+      { name: 'حقيبة فاخرة 👜', min: 200, max: 800 },
+      { name: 'هاتف محمول 📱', min: 800, max: 2000 },
+      { name: 'دراجة هوائية 🚴', min: 300, max: 1200 }
+    ];
+    const item = items[Math.floor(Math.random() * items.length)];
+    const actualPrice = Math.floor(Math.random() * (item.max - item.min)) + item.min;
+    
+    message.reply(`🏷️ **خمن سعر: ${item.name}**\n💡 بين ${item.min} و ${item.max} عملة\nاكتب رقمك في الدردشة! لديك 30 ثانية ⏳`);
+    
+    const guesses = new Map();
+    const filter = m => !isNaN(parseInt(m.content)) && parseInt(m.content) > 0;
+    const collector = message.channel.createMessageCollector({ filter, time: 30000 });
+    
+    collector.on('collect', m => {
+      if (!guesses.has(m.author.id)) {
+        guesses.set(m.author.id, parseInt(m.content));
+        m.react('✅');
+      }
+    });
+    
+    collector.on('end', () => {
+      if (guesses.size === 0) {
+        return message.channel.send(`⏳ انتهى الوقت! السعر الحقيقي كان: **${actualPrice}** 💵`);
+      }
+      
+      let closestId = null, minDiff = Infinity;
+      for (const [gId, g] of guesses) {
+        const diff = Math.abs(g - actualPrice);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestId = gId;
+        }
+      }
+      
+      const prize = Math.floor(actualPrice * 0.05);
+      if (!users.has(closestId)) users.set(closestId, { balance: 0 });
+      users.get(closestId).balance += prize;
+      saveData();
+      
+      message.channel.send(`
+⏰ انتهى الوقت! السعر الحقيقي: **${actualPrice}** 💵
+
+🏆 الفائز: <@${closestId}> — تخمينك: ${guesses.get(closestId)}
+💰 الربح: +${prize} 💵
+      `);
+    });
+  }
+
+  // ⚔️ تحدي لاعب آخر
+  if (cmd === 'تحدي' && message.mentions.users.size > 0) {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const target = message.mentions.users.first();
+    if (target.id === userId) return message.reply('❌ لا يمكنك تحدي نفسك!');
+    
+    message.reply(`⚔️ **${message.author.username}** يتحدى **${target.username}**!\n\nعلى ${target.username} الرد بكتابة **!اقبل** خلال 30 ثانية`);
+    
+    const confirmFilter = m => m.content === '!اقبل' && m.author.id === target.id;
+    const confirm = message.channel.createMessageCollector({ filter: confirmFilter, time: 30000 });
+    
+    confirm.on('collect', () => {
+      confirm.stop();
+      message.channel.send(`⚔️ بدأت المعركة!\nاختيارات: 1=⚔️ هجوم | 2=🛡️ دفاع | 3=✨ ضربة قوية\nاكتب الرقم في الدردشة!`);
+      
+      const choices = new Map();
+      const choiceFilter = m => ['1','2','3'].includes(m.content) && 
+        [userId, target.id].includes(m.author.id);
+      
+      const choiceCol = message.channel.createMessageCollector({ filter: choiceFilter, time: 30000 });
+      
+      choiceCol.on('collect', m => {
+        choices.set(m.author.id, m.content);
+        m.react('✅');
+        if (choices.size === 2) choiceCol.stop();
+      });
+      
+      choiceCol.on('end', () => {
+        if (choices.size < 2) {
+          return message.channel.send('⏳ لم يكمل اللاعبون اختياراتهم!');
+        }
+        
+        const p1c = choices.get(userId);
+        const p2c = choices.get(target.id);
+        const names = { '1':'⚔️ هجوم', '2':'🛡️ دفاع', '3':'✨ ضربة قوية' };
+        
+        let result = '';
+        const beats = { '1':'2', '2':'3', '3':'1' };
+        
+        if (p1c === p2c) {
+          result = '🤝 تعادل! لا أحد يربح ولا يخسر';
+        } else if (beats[p1c] === p2c) {
+          const p = users.get(userId);
+          p.balance += 200;
+          result = `🏆 فاز **${message.author.username}**!\n💰 +200 💵`;
+        } else {
+          const t = users.get(target.id);
+          t.balance += 200;
+          result = `🏆 فاز **${target.username}**!\n💰 +200 💵`;
+        }
+        
+        message.channel.send(`
+⚔️ النتيجة:
+
+**${message.author.username}**: ${names[p1c]}
+**${target.username}**: ${names[p2c]}
+
+${result}
+        `);
+        saveData();
+      });
+    });
+    
+    confirm.on('end', () => {
+      if (!confirm.collected.size) {
+        message.channel.send(`⏳ لم يقبل التحدي في الوقت المحدد.`);
+      }
+    });
+  }
+});
+
+
 
 // ==============================================
 // 🌍 خادم Render — لا تحذف هذا
