@@ -528,6 +528,202 @@ ${result}
   }
 });
 
+// ==============================================
+// 📈 نظام التداول والأسواق المالية
+// ==============================================
+
+// أسعار السوق الأساسية
+const marketAssets = {
+  GOLD:   { name: '🪙 ذهب',               price: 1000,  change: 0, minPrice: 600,  maxPrice: 2000  },
+  STOCK:  { name: '📈 أسهم شركات',         price: 500,   change: 0, minPrice: 200,  maxPrice: 1200  },
+  COIN:   { name: '💱 عملة رقمية',         price: 100,   change: 0, minPrice: 30,   maxPrice: 500   },
+  GEM:    { name: '💎 أحجار كريمة',        price: 2000,  change: 0, minPrice: 1000, maxPrice: 4000  },
+  REAL:   { name: '🏡 عقارات سوقية',       price: 1500,  change: 0, minPrice: 800,  maxPrice: 3000  }
+};
+
+const newsEvents = [
+  { text: '🌟 استقرار اقتصادي', effect: { STOCK: 1.08 }, msg: 'ارتفاع الأسهم بنسبة 8% ⬆️' },
+  { text: '⚒️ اكتشاف منجم ذهب جديد', effect: { GOLD: 0.92 }, msg: 'انخفاض الذهب بنسبة 8% ⬇️ — فرصة شراء!' },
+  { text: '🔥 طلب عالمي على العقارات', effect: { REAL: 1.12 }, msg: 'ارتفاع العقارات بنسبة 12% ⬆️' },
+  { text: '🚀 تحديث تكنولوجي كبير', effect: { COIN: 1.20 }, msg: 'قفزة العملة الرقمية بنسبة 20% ⚡⬆️' },
+  { text: '📉 توترات اقتصادية عالمية', effect: { GOLD: 1.05, STOCK: 0.90 }, msg: 'الذهب ملاذ آمن +5% ⬆️ والأسهم تنخفض ⬇️' },
+  { text: '💎 معرض أحجار كريمة نادرة', effect: { GEM: 1.15 }, msg: 'ارتفاع الأحجار الكريمة بنسبة 15% ⬆️' },
+  { text: '🏗️ مشاريع تطوير عقاري ضخمة', effect: { REAL: 1.07, STOCK: 1.04 }, msg: 'سوق العقارات والأسهم يزدهر ⬆️' },
+  { text: '🌊 هدوء في الأسواق', effect: {}, msg: 'الأسواق مستقرة حالياً 🙂' }
+];
+
+// محفظة كل لاعب
+function getPortfolio(userId) {
+  const u = users.get(userId);
+  if (!u.portfolio) u.portfolio = { GOLD:0, STOCK:0, COIN:0, GEM:0, REAL:0, lastUpdate: Date.now() };
+  return u.portfolio;
+}
+
+// تحديث أسعار السوق عشوائياً
+function updateMarketPrices() {
+  for (const [symbol, asset] of Object.entries(marketAssets)) {
+    const volatility = symbol === 'COIN' ? 0.08 : symbol === 'STOCK' ? 0.04 : 0.02;
+    const change = 1 + (Math.random() - 0.5) * 2 * volatility;
+    asset.price = Math.round(asset.price * change);
+    asset.price = Math.max(asset.minPrice, Math.min(asset.maxPrice, asset.price));
+    asset.change = Math.round((change - 1) * 1000) / 10;
+  }
+}
+
+// تشغيل حدث عشوائي
+function triggerRandomNews(channel) {
+  const news = newsEvents[Math.floor(Math.random() * newsEvents.length)];
+  let effectText = '';
+  
+  for (const [sym, multiplier] of Object.entries(news.effect)) {
+    marketAssets[sym].price = Math.round(marketAssets[sym].price * multiplier);
+    marketAssets[sym].price = Math.max(marketAssets[sym].minPrice, Math.min(marketAssets[sym].maxPrice, marketAssets[sym].price));
+    marketAssets[sym].change = Math.round((multiplier - 1) * 1000) / 10;
+    effectText += `${marketAssets[sym].name}: ${marketAssets[sym].price} 💵\n`;
+  }
+  
+  channel.send(`
+📰 **خبر عاجل:** ${news.text}
+📢 ${news.msg}
+${effectText}
+⏰ السوق يتغير باستمرار — اغتنم الفرصة!
+  `);
+}
+
+// تحديث الأسعار كل ساعة
+setInterval(() => {
+  updateMarketPrices();
+  console.log('📈 تم تحديث أسعار السوق');
+}, 3600000);
+
+// أخبار عشوائية كل 2-4 ساعات
+setInterval(() => {
+  // سيتم تشغيلها عند توفر قناة — نعتمد على التحديث اليدوي للأسعار
+}, 9000000);
+
+// ==============================================
+// 💬 أوامر نظام التداول
+// ==============================================
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const cmd = args.shift().toLowerCase();
+  const userId = message.author.id;
+
+  // 📊 عرض السوق
+  if (cmd === 'سوق' || cmd === 'اسعار') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    
+    let text = '📊 **أسعار السوق الحالية:**\n\n';
+    for (const [sym, asset] of Object.entries(marketAssets)) {
+      const trend = asset.change > 0 ? '📈' : asset.change < 0 ? '📉' : '➡️';
+      text += `${trend} **${sym}** — ${asset.name}\nالسعر: **${asset.price}** 💵 (${asset.change > 0 ? '+' : ''}${asset.change}%)\n\n`;
+    }
+    text += '💡 استخدم: `اشترِ الرمز الكمية` أو `بعِ الرمز الكمية`\nمثال: `اشترِ GOLD 5`';
+    message.reply(text);
+  }
+
+  // 🛒 شراء
+  if (cmd === 'اشترِ' || cmd === 'اشترى' || cmd === 'شراء') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const symbol = args[0]?.toUpperCase();
+    const amount = parseInt(args[1]);
+    
+    if (!marketAssets[symbol]) return message.reply('❌ رمز غير صالح! استخدم: GOLD, STOCK, COIN, GEM, REAL');
+    if (!amount || amount <= 0) return message.reply('❌ حدد الكمية! مثال: `اشترِ GOLD 2`');
+    
+    const totalCost = marketAssets[symbol].price * amount;
+    const u = users.get(userId);
+    const portfolio = getPortfolio(userId);
+    
+    if (u.balance < totalCost) {
+      return message.reply(`❌ رصيدك غير كافٍ!\nالمطلوب: ${totalCost} 💵\nمتاح: ${u.balance} 💵`);
+    }
+    
+    u.balance -= totalCost;
+    portfolio[symbol] += amount;
+    saveData();
+    
+    message.reply(`
+✅ **تم الشراء بنجاح!**
+📦 الكمية: ${amount} × ${marketAssets[symbol].name}
+💰 السعر الواحد: ${marketAssets[symbol].price} 💵
+💳 المجموع المخصوم: ${totalCost} 💵
+💵 رصيدك المتبقي: ${u.balance} 💵
+    `);
+  }
+
+  // 💰 بيع
+  if (cmd === 'بعِ' || cmd === 'بيع') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const symbol = args[0]?.toUpperCase();
+    const amount = parseInt(args[1]);
+    
+    if (!marketAssets[symbol]) return message.reply('❌ رمز غير صالح!');
+    if (!amount || amount <= 0) return message.reply('❌ حدد الكمية! مثال: `بعِ GOLD 2`');
+    
+    const portfolio = getPortfolio(userId);
+    if (portfolio[symbol] < amount) {
+      return message.reply(`❌ لا تمتلك كمية كافية!\nلديك: ${portfolio[symbol]} فقط`);
+    }
+    
+    const totalGain = marketAssets[symbol].price * amount;
+    const u = users.get(userId);
+    
+    portfolio[symbol] -= amount;
+    u.balance += totalGain;
+    saveData();
+    
+    message.reply(`
+✅ **تم البيع بنجاح!**
+📦 الكمية المباعة: ${amount} × ${marketAssets[symbol].name}
+💰 السعر الواحد: ${marketAssets[symbol].price} 💵
+💵 المجموع المضاف: ${totalGain} 💵
+💳 رصيدك الحالي: ${u.balance} 💵
+    `);
+  }
+
+  // 📦 محفظتي
+  if (cmd === 'محفظتي' || cmd === 'محفظة') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const portfolio = getPortfolio(userId);
+    let text = '📦 **محفظتك الاستثمارية:**\n\n';
+    let totalValue = 0, initialValue = 0;
+    let hasAssets = false;
+    
+    for (const [sym, qty] of Object.entries(portfolio)) {
+      if (sym === 'lastUpdate') continue;
+      if (qty > 0) {
+        hasAssets = true;
+        const currentPrice = marketAssets[sym].price;
+        const value = qty * currentPrice;
+        totalValue += value;
+        text += `${marketAssets[sym].name}: **${qty} وحدة**\nالقيمة الحالية: ${value} 💵 (${currentPrice} لكل وحدة)\n\n`;
+      }
+    }
+    
+    if (!hasAssets) {
+      text += '📭 محفظتك فارغة حالياً! استخدم `!سوق` لترى ما يمكنك شراؤه 📈';
+    } else {
+      text += `💰 **إجمالي قيمة المحفظة:** ${totalValue} 💵`;
+    }
+    
+    message.reply(text);
+  }
+
+  // 📰 خبر عشوائي
+  if (cmd === 'خبر' || cmd === 'سوق_خبر') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    triggerRandomNews(message.channel);
+  }
+
+  // 🔄 تحديث الأسعار يدوياً
+  if (cmd === 'تحديث_الاسعار' || cmd === 'تحديث_السوق') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    updateMarketPrices();
+    message.reply('✅ تم تحديث أسعار السوق! اكتب `!سوق` للاطلاع عليها 📊');
+  }
+});
 
 
 // ==============================================
