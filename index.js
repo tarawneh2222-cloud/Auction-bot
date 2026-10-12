@@ -12,36 +12,35 @@ const TOKEN = process.env.TOKEN;
 // 📂 تخزين البيانات
 const users = new Map();
 
-// 🏠 قائمة العقارات
+// 🏠 العقارات
 const estates = [
-  { name: 'مزرعة', price: 80000, income: 800 },
-  { name: 'مكتب تجاري', price: 150000, income: 500 },
-  { name: 'مركز تسوق', price: 400000, income: 1800 },
-  { name: 'مصنع', price: 800000, income: 5000 },
-  { name: 'محطة وقود', price: 250000, income: 3000 },
-  { name: 'مستوصف', price: 600000, income: 7500 },
-  { name: 'مدينة ملاهي', price: 1200000, income: 18000 },
-  { name: 'قصر', price: 2000000, income: 25000 },
-  { name: 'محطة طاقة', price: 1500000, income: 22000 },
-  { name: 'برج إداري', price: 1800000, income: 10000 }
+  { id: 'farm', name: '🚜 مزرعة', price: 80000, income: 800, desc: 'مصدر غذاء ونجاح مستمر' },
+  { id: 'office', name: '🏢 مكتب تجاري', price: 150000, income: 500, desc: 'مقر عمل احترافي' },
+  { id: 'mall', name: '🏬 مركز تسوق', price: 400000, income: 1800, desc: 'يجذب الناس يومياً' },
+  { id: 'factory', name: '🏭 مصنع', price: 800000, income: 5000, desc: 'إنتاج مستمر وأرباح وفيرة' },
+  { id: 'gas', name: '⛽ محطة وقود', price: 250000, income: 3000, desc: 'الجميع يحتاج الوقود' },
+  { id: 'hospital', name: '🏥 مستوصف', price: 600000, income: 7500, desc: 'خدمة وأرباح معاً' },
+  { id: 'park', name: '🎡 مدينة ملاهي', price: 1200000, income: 18000, desc: 'فرح الناس وثروتك تنمو' },
+  { id: 'palace', name: '🏰 قصر', price: 2000000, income: 25000, desc: 'رمز النجاح والفخامة' },
+  { id: 'powerplant', name: '⚡ محطة طاقة', price: 1500000, income: 22000, desc: 'الجميع يحتاجك دائماً' },
+  { id: 'tower', name: '🗼 برج إداري', price: 1800000, income: 10000, desc: 'أعلى وأكثر إشراقاً في المدينة' }
+];
+
+// 📈 عناصر السوق
+const marketItems = [
+  { id: 'gold', name: '🪙 ذهب', price: 2000, desc: 'ملاذ آمن وقت الأزمات' },
+  { id: 'diamond', name: '💎 ألماس', price: 15000, desc: 'قيمته لا تنخفض أبداً' },
+  { id: 'stock', name: '📊 أسهم شركة', price: 50000, desc: 'استثمار في شركات ناجحة' },
+  { id: 'art', name: '🖼️ لوحة فنية نادرة', price: 250000, desc: 'تحفة فنية قيمتها تزداد' },
+  { id: 'company', name: '🏢 شركة كاملة', price: 2000000, desc: 'أنت رئيس مجلس الإدارة!' }
 ];
 
 // 🎮 دوال مساعدة
-function getEmoji(name) {
-  const emojis = {
-    'مزرعة': '🚜', 'مكتب تجاري': '🏢', 'مركز تسوق': '🏬',
-    'مصنع': '🏭', 'محطة وقود': '⛽', 'مستوصف': '🏥',
-    'مدينة ملاهي': '🎡', 'قصر': '🏰', 'محطة طاقة': '⚡',
-    'برج إداري': '🗼'
-  };
-  return emojis[name] || '🏠';
-}
-
-function createEstateButtons() {
-  const buttons = estates.map(e =>
+function createItemButtons(items, prefix) {
+  const buttons = items.map(item =>
     new ButtonBuilder()
-      .setCustomId(`buy_${e.name}`)
-      .setLabel(`${getEmoji(e.name)} شراء`)
+      .setCustomId(`${prefix}_${item.id}`)
+      .setLabel(`شراء ${item.name.split(' ').slice(1).join(' ')}`)
       .setStyle(ButtonStyle.Success)
   );
   const rows = [];
@@ -71,6 +70,7 @@ client.on('messageCreate', async message => {
 !رصيد — معرفة رصيدك
 !يومي — استلام راتبك اليومي
 !عقارات — عرض العقارات مع أزرار الشراء
+!سوق — عرض عناصر السوق للاستثمار
 !ممتلكات — عرض ما تملكه
 !اغنى — قائمة أغنى اللاعبين
     `);
@@ -78,7 +78,7 @@ client.on('messageCreate', async message => {
 
   if (command === 'بداية') {
     if (users.has(message.author.id)) return message.reply('⚠️ لديك حساب بالفعل!');
-    users.set(message.author.id, { balance: 1000, lastDaily: 0, estates: [] });
+    users.set(message.author.id, { balance: 1000, lastDaily: 0, estates: [], investments: [] });
     return message.reply('✅ تم إنشاء حسابك! رصيدك: **1000** 💵 اكتب !يومي لبدء اللعب');
   }
 
@@ -104,36 +104,70 @@ client.on('messageCreate', async message => {
     
     estates.forEach(e => {
       embed.addFields({
-        name: `${getEmoji(e.name)} ${e.name}`,
-        value: `السعر: ${e.price} 💵 | دخل يومي +${e.income}`,
+        name: e.name,
+        value: `💰 السعر: ${e.price} 💵\n📈 دخل يومي +${e.income} 💵\n📝 ${e.desc}`,
         inline: false
       });
     });
 
-    return message.reply({ embeds: [embed], components: createEstateButtons() });
+    return message.reply({ embeds: [embed], components: createItemButtons(estates, 'buy_estate') });
+  }
+
+  if (command === 'سوق') {
+    const embed = new EmbedBuilder()
+      .setTitle('📈 سوق الاستثمار')
+      .setColor('#9b59b6')
+      .setFooter({ text: 'استثمر بحكمة وازدد ثراءً!' });
+    
+    marketItems.forEach(item => {
+      embed.addFields({
+        name: item.name,
+        value: `💰 السعر: ${item.price} 💵\n📝 ${item.desc}`,
+        inline: false
+      });
+    });
+
+    return message.reply({ embeds: [embed], components: createItemButtons(marketItems, 'buy_market') });
   }
 
   if (command === 'ممتلكات') {
     if (!users.has(message.author.id)) return message.reply('⚠️ اكتب !بداية أولاً');
     const u = users.get(message.author.id);
-    if (u.estates.length === 0) return message.reply('📦 لا تملك شيئاً بعد! اكتب !عقارات للشراء');
-    let list = '📦 **ممتلكاتك:**\n';
-    let total = 0;
-    u.estates.forEach(e => {
-      list += `${getEmoji(e.name)} ${e.name} | دخل يومي +${e.income}\n`;
-      total += e.income;
-    });
-    list += `\n📈 إجمالي الدخل اليومي: +${total} 💵`;
+    if (u.estates.length === 0 && u.investments.length === 0) {
+      return message.reply('📦 لا تملك شيئاً بعد! اكتب !عقارات أو !سوق للشراء');
+    }
+    
+    let list = '📦 **ممتلكاتك:**\n\n';
+    let totalIncome = 0;
+    
+    if (u.estates.length > 0) {
+      list += '🏠 **العقارات:**\n';
+      u.estates.forEach(e => {
+        list += `✅ ${e.name} | دخل يومي +${e.income} 💵\n`;
+        totalIncome += e.income;
+      });
+      list += '\n';
+    }
+    
+    if (u.investments.length > 0) {
+      list += '📈 **الاستثمارات:**\n';
+      u.investments.forEach(i => {
+        list += `✅ ${i.name}\n`;
+      });
+    }
+    
+    if (totalIncome > 0) list += `\n💰 إجمالي دخلك اليومي: +${totalIncome} 💵`;
     return message.reply(list);
   }
 
   if (command === 'اغنى') {
     if (users.size === 0) return message.reply('⚠️ لا يوجد لاعبين حتى الآن!');
     const sorted = Array.from(users.entries()).sort((a, b) => b[1].balance - a[1].balance).slice(0, 10);
-    let list = '🏆 **أغنى 10 لاعبين:**\n\n';
+    let list = '🏆 **أغنى 10 لاعبين هذا الأسبوع:**\n\n';
     sorted.forEach(([id, u], i) => {
       const m = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
-      list += `${m} #${i+1}: <@${id}> — ${u.balance} 💵\n`;
+      const title = i === 0 ? ' — الملك 👑' : i === 1 ? ' — الأمير 🥈' : i === 2 ? ' — النبيل 🥉' : '';
+      list += `${m} المرتبة ${i+1}: <@${id}> — **${u.balance}** 💵 ${title}\n`;
     });
     return message.reply(list);
   }
@@ -142,38 +176,68 @@ client.on('messageCreate', async message => {
 // 🎯 معالجة الضغط على الأزرار
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
-  if (!interaction.customId.startsWith('buy_')) return;
-
-  const name = interaction.customId.replace('buy_', '');
-  const estate = estates.find(e => e.name === name);
-
+  
   if (!users.has(interaction.user.id)) {
     return interaction.reply({ content: '⚠️ اكتب !بداية أولاً لإنشاء حسابك', ephemeral: true });
   }
-
-  const u = users.get(interaction.user.id);
   
-  if (u.balance < estate.price) {
-    return interaction.reply({ 
-      content: `❌ رصيدك غير كافٍ!\nالمطلوب: ${estate.price} 💵\nمتوفر: ${u.balance} 💵`,
-      ephemeral: true 
-    });
-  }
+  const u = users.get(interaction.user.id);
 
-  if (u.estates.find(e => e.name === name)) {
-    return interaction.reply({ content: '⚠️ تملك هذا العقار بالفعل!', ephemeral: true });
-  }
-
-  u.balance -= estate.price;
-  u.estates.push({ ...estate });
-
-  await interaction.reply(`
-✅ **تم الشراء بنجاح!**
-${getEmoji(name)} ${name}
-💰 خصم: ${estate.price} 💵
+  // شراء عقار
+  if (interaction.customId.startsWith('buy_estate_')) {
+    const id = interaction.customId.replace('buy_estate_', '');
+    const item = estates.find(e => e.id === id);
+    
+    if (!item) return interaction.reply({ content: '❌ العنصر غير موجود!', ephemeral: true });
+    if (u.balance < item.price) {
+      return interaction.reply({ 
+        content: `❌ رصيدك غير كافٍ!\nالمطلوب: ${item.price} 💵\nمتوفر: ${u.balance} 💵`,
+        ephemeral: true 
+      });
+    }
+    if (u.estates.find(e => e.id === id)) {
+      return interaction.reply({ content: '⚠️ تملك هذا العقار بالفعل!', ephemeral: true });
+    }
+    
+    u.balance -= item.price;
+    u.estates.push({ ...item });
+    
+    return interaction.reply(`
+✅ **تم شراء العقار بنجاح!**
+${item.name}
+💰 السعر: ${item.price} 💵
 💳 رصيدك المتبقي: ${u.balance} 💵
-📈 دخل يومي جديد: +${estate.income} 💵
-  `);
+📈 دخل يومي جديد: +${item.income} 💵
+    `);
+  }
+
+  // شراء من السوق
+  if (interaction.customId.startsWith('buy_market_')) {
+    const id = interaction.customId.replace('buy_market_', '');
+    const item = marketItems.find(m => m.id === id);
+    
+    if (!item) return interaction.reply({ content: '❌ العنصر غير موجود!', ephemeral: true });
+    if (u.balance < item.price) {
+      return interaction.reply({ 
+        content: `❌ رصيدك غير كافٍ!\nالمطلوب: ${item.price} 💵\nمتوفر: ${u.balance} 💵`,
+        ephemeral: true 
+      });
+    }
+    if (u.investments.find(i => i.id === id)) {
+      return interaction.reply({ content: '⚠️ تملك هذا بالفعل!', ephemeral: true });
+    }
+    
+    u.balance -= item.price;
+    u.investments.push({ ...item });
+    
+    return interaction.reply(`
+✅ **تم الشراء بنجاح!**
+${item.name}
+💰 السعر: ${item.price} 💵
+💳 رصيدك المتبقي: ${u.balance} 💵
+📝 ${item.desc}
+    `);
+  }
 });
 
 // 🔑 تشغيل البوت
