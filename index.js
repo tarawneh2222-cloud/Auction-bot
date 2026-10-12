@@ -244,3 +244,15 @@ ${item.name}
 client.login(TOKEN).catch(err => {
   console.error('❌ خطأ في تسجيل الدخول:', err.message);
 });
+// 🌐 خادم بسيط ليعمل على Render
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('✅ بوت إمبراطورية الثروة يعمل بنجاح!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 الخادم يعمل على المنفذ ${PORT}`);
+});
