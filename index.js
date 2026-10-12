@@ -895,6 +895,275 @@ ${assetsData[assetName].emoji} ${assetName}
     message.reply(text);
   }
 });
+// ==============================================
+// 🎩 نظام المزادات السرية والقطع النادرة
+// ==============================================
+
+let activeAuction = null;
+
+// أنواع القطع النادرة
+const treasureItems = {
+  عادية: [
+    { name: 'صندوق عملات قديمة', emoji: '🪙', value: 800, desc: 'صندوق خشبي مليء بالعملات المعدنية' },
+    { name: 'ساعة حائط قديمة', emoji: '🕰️', value: 1200, desc: 'ساعة قديمة لا تزال تعمل بدقة مذهلة' },
+    { name: 'قطعة أرض صغيرة', emoji: '🌱', value: 1500, desc: 'قطعة أرض في منطقة هادئة' },
+    { name: 'مجموعة كتب نادرة', emoji: '📚', value: 950, desc: 'كتب قديمة قيمتها في ازدياد' },
+    { name: 'حيوان أليف نادر', emoji: '🐾', value: 1100, desc: 'حيوان مميز يزين ممتلكاتك' }
+  ],
+  مميزة: [
+    { name: 'لوحة فنية أصلية', emoji: '🖼️', value: 5000, desc: 'لوحة لفنان مشهور، قيمتها ترتفع بمرور الوقت' },
+    { name: 'أسهم في شركة واعدة', emoji: '📈', value: 6500, desc: 'حصة في شركة ناشئة تنمو بسرعة' },
+    { name: 'مزرعة مثمرة', emoji: '🌾', value: 7200, desc: 'مزرعة تدر دخلاً منتظماً كل أسبوع' },
+    { name: 'مجوهرات عائلية', emoji: '💎', value: 5800, desc: 'عقد ثمين مرّ عبر أجيال' },
+    { name: 'متجر صغير في وسط المدينة', emoji: '🏪', value: 8000, desc: 'محل تجاري صغير يدر ربحاً مستقراً' }
+  ],
+  نادرة: [
+    { name: 'سيارة كلاسيكية فاخرة', emoji: '🚗', value: 25000, desc: 'سيارة قديمة بحالة ممتازة، قطعة نادرة' },
+    { name: 'منزل في منطقة راقية', emoji: '🏡', value: 35000, desc: 'منزل واسع في أرقى أحياء المدينة' },
+    { name: 'سندات ذهب ثمينة', emoji: '📜', value: 28000, desc: 'وثائق ملكية لسبائك ذهب حقيقية' },
+    { name: 'مطعم ناجح', emoji: '🍽️', value: 32000, desc: 'مطعم شهير له سمعة طيبة' },
+    { name: 'مخبأ سري في الجبال', emoji: '⛰️', value: 22000, desc: 'مكان سري قد يخفي مفاجآت مستقبلية' }
+  ],
+  اسطورية: [
+    { name: 'قصر على شاطئ البحر', emoji: '🏖️🏰', value: 150000, desc: 'قصر تاريخي بمساحات شاسعة وإطلالة بحرية لا تُقارن' },
+    { name: 'شركة تجارية كاملة', emoji: '🏢', value: 200000, desc: 'مؤسسة تجارية قائمة بأصولها وموظفيها' },
+    { name: 'طائرة خاصة', emoji: '✈️', value: 180000, desc: 'طائرة خاصة مجهزة بالكامل للسفر أينما شئت' },
+    { name: 'كنز مدفون من العصور القديمة', emoji: '🗺️💰', value: 250000, desc: 'مخبأ مليء بالتحف والذهب لم يره أحد منذ قرون!' },
+    { name: 'جزيرة خاصة بك', emoji: '🏝️', value: 300000, desc: 'جزيرة استوائية خاصة، ملكك بالكامل!' }
+  ]
+};
+
+// أوصاف غامضة للمزاد
+const mysteryDescriptions = [
+  'شيء ثقيل ومغلف بقطعة قماش قديمة... ✨',
+  'صندوق خشبي قديم ومغلق بإحكام... 📦',
+  'حقيبة جلدية تبدو ثمينة... 💼',
+  'لفافة ورقية تبدو قديمة جداً... 📜',
+  'مغلف لامع يلمع في الظلام... ✨',
+  'شيء مخبأ داخل صندوق حديدي صدئ... 🔒',
+  'حقيبة صغيرة تنبعث منها رائحة العطر القديم... 👜',
+  'غلاف ورقي سميك يحمل ختماً غامضاً... ⚜️'
+];
+
+// اختيار قطعة عشوائية
+function getRandomTreasure() {
+  const roll = Math.random();
+  let category, items;
+  
+  if (roll < 0.05) {
+    category = 'اسطورية';
+    items = treasureItems.اسطورية;
+  } else if (roll < 0.25) {
+    category = 'نادرة';
+    items = treasureItems.نادرة;
+  } else if (roll < 0.60) {
+    category = 'مميزة';
+    items = treasureItems.مميزة;
+  } else {
+    category = 'عادية';
+    items = treasureItems.عادية;
+  }
+  
+  const item = items[Math.floor(Math.random() * items.length)];
+  return { ...item, category };
+}
+
+// ==============================================
+// 💬 أوامر المزادات السرية
+// ==============================================
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const cmd = args.shift().toLowerCase();
+  const userId = message.author.id;
+
+  // 🎩 بدء مزاد جديد
+  if (cmd === 'مزاد_جديد' || cmd === 'مزاد_ابدأ') {
+    // تحقق من صلاحيات المدير
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ فقط المسؤولون يمكنهم بدء مزادات!');
+    }
+    if (activeAuction) {
+      return message.reply('⚠️ يوجد مزاد جاري بالفعل! أنهِه أولاً بـ `!انهِ_المزاد`');
+    }
+    
+    const treasure = getRandomTreasure();
+    const startingPrice = Math.round(treasure.value * 0.4);
+    const minIncrement = Math.round(startingPrice * 0.1);
+    
+    activeAuction = {
+      item: treasure,
+      mysteryText: mysteryDescriptions[Math.floor(Math.random() * mysteryDescriptions.length)],
+      highestBid: 0,
+      highestBidder: null,
+      startingPrice,
+      minIncrement,
+      bids: [],
+      startTime: Date.now(),
+      channelId: message.channel.id
+    };
+    
+    message.reply(`
+🎩 **مزاد سري جديد مفتوح!** ✨
+
+في مكان ما هنا يوجد:
+> ${activeAuction.mysteryText}
+
+❓ **مجهول تماماً!** هل هو كنز ثمين أم مجرد تحفة عادية؟
+ابدأ المزايدة من: **${startingPrice.toLocaleString()}** 💵
+الحد الأدنى للزيادة: **${minIncrement.toLocaleString()}** 💵
+
+اكتب: \`!زايد المبلغ\` للمشاركة 💰
+    `);
+  }
+
+  // 💰 المزايدة
+  if (cmd === 'زايد' || cmd === 'مزايدة') {
+    if (!activeAuction) {
+      return message.reply('❌ لا يوجد مزاد جاري حالياً! انتظر حتى يبدأ مزاد جديد 🎩');
+    }
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً لإنشاء حسابك!');
+    
+    const amount = parseInt(args[0]);
+    const u = users.get(userId);
+    
+    if (!amount || amount <= 0) {
+      return message.reply('❌ حدد المبلغ! مثال: `!زايد 5000`');
+    }
+    if (u.balance < amount) {
+      return message.reply(`❌ رصيدك غير كافٍ!\nمحاولة: ${amount.toLocaleString()} 💵\nمتاح: ${u.balance.toLocaleString()} 💵`);
+    }
+    if (amount < activeAuction.startingPrice) {
+      return message.reply(`❌ المبلغ أقل من السعر الابتدائي!\nالحد الأدنى للبداية: ${activeAuction.startingPrice.toLocaleString()} 💵`);
+    }
+    if (amount <= activeAuction.highestBid) {
+      return message.reply(`❌ يجب أن يكون مبلغك أعلى من أعلى مزايدة حالياً!\nأعلى مزايدة: ${activeAuction.highestBid.toLocaleString()} 💵`);
+    }
+    if (activeAuction.highestBid > 0 && amount - activeAuction.highestBid < activeAuction.minIncrement) {
+      return message.reply(`❌ يجب أن تزيد بمقدار لا يقل عن ${activeAuction.minIncrement.toLocaleString()} 💵`);
+    }
+    
+    activeAuction.highestBid = amount;
+    activeAuction.highestBidder = { id: userId, name: message.author.username };
+    activeAuction.bids.push({ userId, name: message.author.username, amount, time: Date.now() });
+    
+    message.reply(`
+🔔 **مزايدة جديدة!**
+🏆 أعلى سعر الآن: **${amount.toLocaleString()}** 💵
+👤 المزايد: **${message.author.username}**
+
+من يزايد بأكثر؟ اكتب \`!زايد المبلغ\` 💪
+    `);
+  }
+
+  // 🔍 عرض حالة المزاد الحالي
+  if (cmd === 'مزاد_حالي' || cmd === 'حالة_المزاد') {
+    if (!activeAuction) {
+      return message.reply('❌ لا يوجد مزاد جاري حالياً 🎩');
+    }
+    
+    if (activeAuction.highestBid === 0) {
+      message.reply(`
+🎩 **المزاد جاري الآن...**
+❓ ${activeAuction.mysteryText}
+💰 لم يبدأ أحد بالمزايدة بعد! كن الأول 🏃
+اكتب \`!زايد ${activeAuction.startingPrice}\` لتبدأ المزايدة!
+      `);
+    } else {
+      message.reply(`
+🎩 **المزاد مستمر...**
+❓ ${activeAuction.mysteryText}
+🏆 أعلى مزايدة: **${activeAuction.highestBid.toLocaleString()}** 💵
+👤 من: **${activeAuction.highestBidder.name}**
+⏳ المزايدات: ${activeAuction.bids.length}
+      `);
+    }
+  }
+
+  // 🎇 إنهاء المزاد وكشف السلعة
+  if (cmd === 'انهِ_المزاد' || cmd === 'إنهاء_المزاد') {
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ فقط المسؤولون يمكنهم إنهاء المزاد!');
+    }
+    if (!activeAuction) {
+      return message.reply('❌ لا يوجد مزاد جاري لإنهاؤه!');
+    }
+    
+    if (activeAuction.highestBid === 0) {
+      message.reply(`
+😔 **انتهى المزاد...**
+لم يتقدم أحد بمزايدة! القطعة تعود لمكانها مجهولة مرة أخرى ⛰️
+      `);
+      activeAuction = null;
+      return;
+    }
+    
+    // خصم المبلغ من الفائز وإضافة القطعة لممتلكاته
+    const winnerId = activeAuction.highestBidder.id;
+    const winnerName = activeAuction.highestBidder.name;
+    const bidAmount = activeAuction.highestBid;
+    const item = activeAuction.item;
+    
+    const u = users.get(winnerId);
+    u.balance -= bidAmount;
+    
+    // إضافة القطعة لممتلكات الفائز
+    if (!u.treasures) u.treasures = [];
+    u.treasures.push({
+      name: item.name,
+      emoji: item.emoji,
+      value: bidAmount,
+      wonAt: Date.now()
+    });
+    saveData();
+    
+    // تحديد لون الفئة
+    const categoryColors = {
+      عادية: '🟢 عادية',
+      مميزة: '🟡 مميزة',
+      نادرة: '🟠 نادرة',
+      اسطورية: '🔴 أسطورية ✨👑'
+    };
+    
+    message.channel.send(`
+${item.category === 'اسطورية' ? '🎉🎊🎊🎉' : '🎇🎆🎇'}
+**✨ كشف الستار عن القطعة المجهولة! ✨**
+
+📦 كانت العبوة تخفي:
+${item.emoji} **${item.name}**
+📂 الفئة: ${categoryColors[item.category]}
+📝 الوصف: ${item.desc}
+💰 قيمتها الحقيقية: **${item.value.toLocaleString()}** 💵
+
+🏆 **الفائز:** ${message.author.toString() === winnerName ? winnerName : `<@${winnerId}>`}
+💰 المبلغ المدفوع: **${bidAmount.toLocaleString()}** 💵
+
+${bidAmount < item.value ? `🎉 ربحك الفوري: **+${(item.value - bidAmount).toLocaleString()}** 💵` : item.category === 'اسطورية' ? '👑 قطعة أسطورية لا تُقدر بثمن!' : 'قيمة جيدة لقطعة نادرة!'}
+
+مبروك للفائز! 🥳🎊
+    `);
+    
+    activeAuction = null;
+  }
+
+  // 📜 عرض كنوزك التي فزت بها
+  if (cmd === 'كنوزي' || cmd === 'مقتنياتي') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const u = users.get(userId);
+    
+    if (!u.treasures || u.treasures.length === 0) {
+      return message.reply('📭 لم تفز بأي قطعة من المزادات حتى الآن! شارك في مزاد قادم 🎩✨');
+    }
+    
+    let text = '🏆 **مقتنياتك النادرة من المزادات:**\n\n';
+    u.treasures.forEach((t, i) => {
+      text += `${i + 1}. ${t.emoji} **${t.name}**\n💰 قيمتها: ${t.value.toLocaleString()} 💵\n\n`;
+    });
+    text += `📊 المجموع: ${u.treasures.length} قطعة نادرة`;
+    
+    message.reply(text);
+  }
+});
 
 
 // ==============================================
