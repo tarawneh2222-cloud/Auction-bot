@@ -480,3 +480,287 @@ client.on('messageCreate', async message => {
     return message.reply(list);
   }
 });
+// 🎮 دالة استخراج الإيموجي لكل عنصر
+function getEmoji(name) {
+  const emojis = {
+    'مزرعة': '🚜',
+    'مكتب تجاري': '🏢',
+    'مركز تسوق': '🏬',
+    'مصنع': '🏭',
+    'محطة وقود': '⛽',
+    'مستوصف': '🏥',
+    'مدينة ملاهي': '🎡',
+    'قصر': '🏰',
+    'محطة طاقة': '⚡',
+    'برج إداري': '🗼',
+    'ذهب': '🥇',
+    'فضة': '🥈',
+    'أسهم': '📈',
+    'عملات رقمية': '🪙',
+    'سيارة فاخرة': '🚗',
+    'يخت': '⛵',
+    'طائرة خاصة': '✈️'
+  };
+  return emojis[name] || '🏠';
+}
+
+// 📦 تقسيم الأزرار لصفوف كل صف 5 أزرار كحد أقصى
+function createButtons(items, prefix) {
+  const buttons = items.map(item => ({
+    type: 2,
+    style: 1,
+    label: `${getEmoji(item.name)} ${item.name}`,
+    custom_id: `${prefix}_${item.name}`
+  }));
+  
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    rows.push({
+      type: 1,
+      components: buttons.slice(i, i + 5)
+    });
+  }
+  return rows;
+}
+
+// 📋 تحويل القائمة إلى وصف منظم
+function createFields(items) {
+  return items.map(e => ({
+    name: `${getEmoji(e.name)} ${e.name}`,
+    value: `💰 السعر: **${e.price}** 💵\n📈 دخل يومي: +**${e.income}** 💵`,
+    inline: false
+  }));
+}
+
+// 🎮 معالجة الأوامر النصية
+const PREFIX = '!';
+
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // 📋 المساعدة — قائمة الأزرار الرئيسية
+  if (command === 'مساعدة' || command === 'اوامر' || command === 'قائمة') {
+    return message.reply({
+      embeds: [{
+        title: '📋 القائمة الرئيسية لإمبراطورية الثروة',
+        description: 'اختر من الأزرار أدناه ما تريد فعله، أو اكتب الأمر يدوياً',
+        color: 0x9b59b6
+      }],
+      components: [
+        {
+          type: 1,
+          components: [
+            { type: 2, style: 3, label: '💰 رصيدي', custom_id: 'menu_balance' },
+            { type: 2, style: 1, label: '📅 يومي', custom_id: 'menu_daily' },
+            { type: 2, style: 2, label: '🏠 العقارات', custom_id: 'menu_estates' }
+          ]
+        },
+        {
+          type: 1,
+          components: [
+            { type: 2, style: 1, label: '📦 ممتلكاتي', custom_id: 'menu_my' },
+            { type: 2, style: 2, label: '📈 السوق', custom_id: 'menu_market' },
+            { type: 2, style: 3, label: '🏆 الأغنى', custom_id: 'menu_top' }
+          ]
+        }
+      ]
+    });
+  }
+
+  // 🆕 إنشاء حساب
+  if (command === 'بداية' || command === 'تسجيل') {
+    if (users.has(message.author.id)) {
+      return message.reply('⚠️ لديك حساب بالفعل! اكتب `!رصيد` لمعرفة رصيدك');
+    }
+    users.set(message.author.id, {
+      balance: 1000,
+      lastDaily: 0,
+      estates: [],
+      investments: [],
+      joinDate: Date.now()
+    });
+    return message.reply('✅ تم إنشاء حسابك بنجاح! رصيدك الأولي: **1000** 💵\nاكتب `!يومي` لاستلام راتبك اليومي، أو اضغط على الأزرار أعلاه');
+  }
+
+  // 💰 الرصيد
+  if (command === 'رصيد') {
+    if (!users.has(message.author.id)) return message.reply('⚠️ أنشئ حساباً أولاً بـ: `!بداية`');
+    const user = users.get(message.author.id);
+    return message.reply(`💰 رصيدك الحالي: **${user.balance}** 💵`);
+  }
+
+  // 📅 الراتب اليومي
+  if (command === 'يومي') {
+    if (!users.has(message.author.id)) return message.reply('⚠️ أنشئ حساباً أولاً بـ: `!بداية`');
+    const user = users.get(message.author.id);
+    const now = Date.now();
+    if (now - user.lastDaily < 86400000) {
+      return message.reply('⏳ لقد استلمت راتبك اليوم بالفعل! عد غداً الساعة نفسها');
+    }
+    user.lastDaily = now;
+    user.balance += 500;
+    return message.reply('✅ تم استلام راتبك اليومي: **+500** 💵 | الرصيد الحالي: ' + user.balance);
+  }
+
+  // 🏠 عرض العقارات مع أزرار
+  if (command === 'عقارات') {
+    return message.reply({
+      embeds: [{
+        title: '🏠 العقارات المتاحة',
+        fields: createFields(estates),
+        color: 0x2ecc71,
+        footer: { text: 'اضغط على الزر لشراء العقار مباشرة' }
+      }],
+      components: createButtons(estates, 'buy')
+    });
+  }
+
+  // 📦 ممتلكاتي
+  if (command === 'ممتلكات' || command === 'عقاراتي') {
+    if (!users.has(message.author.id)) return message.reply('⚠️ أنشئ حساباً أولاً بـ: `!بداية`');
+    const user = users.get(message.author.id);
+    if (user.estates.length === 0) {
+      return message.reply('📦 أنت لا تملك أي شيء حتى الآن! اكتب `!عقارات` لترى ما يمكنك شراؤه');
+    }
+    let list = '📦 **ممتلكاتك:**\n';
+    let totalIncome = 0;
+    user.estates.forEach(e => {
+      list += `${getEmoji(e.name)} **${e.name}** — دخل يومي +${e.income} 💵\n`;
+      totalIncome += e.income;
+    });
+    list += `\n📈 إجمالي دخلك اليومي: +**${totalIncome}** 💵`;
+    return message.reply(list);
+  }
+
+  // 🏆 أغنى اللاعبين
+  if (command === 'اغنى' || command === 'الترتيب' || command === 'قائمة') {
+    if (users.size === 0) return message.reply('⚠️ لا يوجد لاعبين مسجلين حتى الآن! كن الأول بـ `!بداية`');
+    const sorted = Array.from(users.entries())
+      .sort((a, b) => b[1].balance - a[1].balance)
+      .slice(0, 10);
+    
+    let list = '🏆 **أغنى 10 لاعبين هذا الأسبوع:**\n\n';
+    sorted.forEach(([id, u], i) => {
+      const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
+      const title = i === 0 ? ' — الملك 👑' : i === 1 ? ' — الأمير 🥈' : i === 2 ? ' — النبيل 🥉' : '';
+      list += `${medal} المرتبة ${i+1}: <@${id}> — **${u.balance}** 💵 ${title}\n`;
+    });
+    return message.reply(list);
+  }
+});
+
+// 🎯 معالجة الضغط على جميع الأزرار
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
+
+  const customId = interaction.customId;
+  const userId = interaction.user.id;
+
+  // 📋 أزرار القائمة الرئيسية
+  if (customId.startsWith('menu_')) {
+    const action = customId.replace('menu_', '');
+    
+    if (action === 'balance') {
+      if (!users.has(userId)) return interaction.reply({ content: '⚠️ أنشئ حساباً أولاً بـ: `!بداية`', ephemeral: true });
+      const user = users.get(userId);
+      return interaction.reply({ content: `💰 رصيدك الحالي: **${user.balance}** 💵`, ephemeral: true });
+    }
+    
+    if (action === 'daily') {
+      if (!users.has(userId)) return interaction.reply({ content: '⚠️ أنشئ حساباً أولاً بـ: `!بداية`', ephemeral: true });
+      const user = users.get(userId);
+      const now = Date.now();
+      if (now - user.lastDaily < 86400000) {
+        return interaction.reply({ content: '⏳ لقد استلمت راتبك اليوم بالفعل! عد غداً', ephemeral: true });
+      }
+      user.lastDaily = now;
+      user.balance += 500;
+      return interaction.reply({ content: `✅ تم استلام راتبك اليومي: **+500** 💵`, ephemeral: true });
+    }
+    
+    if (action === 'estates') {
+      return interaction.reply({
+        embeds: [{
+          title: '🏠 العقارات المتاحة',
+          fields: createFields(estates),
+          color: 0x2ecc71,
+          footer: { text: 'اضغط على الزر لشراء' }
+        }],
+        components: createButtons(estates, 'buy'),
+        ephemeral: false
+      });
+    }
+    
+    if (action === 'my') {
+      if (!users.has(userId)) return interaction.reply({ content: '⚠️ أنشئ حساباً أولاً بـ: `!بداية`', ephemeral: true });
+      const user = users.get(userId);
+      if (user.estates.length === 0) {
+        return interaction.reply({ content: '📦 أنت لا تملك أي شيء حتى الآن!', ephemeral: true });
+      }
+      let list = '📦 **ممتلكاتك:**\n';
+      let totalIncome = 0;
+      user.estates.forEach(e => {
+        list += `${getEmoji(e.name)} ${e.name} — دخل يومي +${e.income}\n`;
+        totalIncome += e.income;
+      });
+      list += `\n📈 إجمالي الدخل اليومي: +${totalIncome} 💵`;
+      return interaction.reply({ content: list, ephemeral: true });
+    }
+    
+    if (action === 'top') {
+      if (users.size === 0) return interaction.reply({ content: '⚠️ لا يوجد لاعبين حتى الآن!', ephemeral: true });
+      const sorted = Array.from(users.entries())
+        .sort((a, b) => b[1].balance - a[1].balance)
+        .slice(0, 10);
+      let list = '🏆 **أغنى 10 لاعبين:**\n\n';
+      sorted.forEach(([id, u], i) => {
+        const medal = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : '•';
+        list += `${medal} #${i+1}: <@${id}> — ${u.balance} 💵\n`;
+      });
+      return interaction.reply({ content: list, ephemeral: true });
+    }
+    
+    return;
+  }
+
+  // 🛒 زر الشراء — للعقارات وكل شيء
+  if (customId.startsWith('buy_')) {
+    const itemName = customId.replace('buy_', '');
+    
+    if (!users.has(userId)) {
+      return interaction.reply({ 
+        content: '⚠️ أنشئ حساباً أولاً بكتابة: `!بداية`',
+        ephemeral: true 
+      });
+    }
+    
+    const item = estates.find(e => e.name === itemName);
+    if (!item) {
+      return interaction.reply({ content: '❌ هذا العنصر غير موجود!', ephemeral: true });
+    }
+    
+    const user = users.get(userId);
+    if (user.balance < item.price) {
+      return interaction.reply({ 
+        content: `❌ رصيدك غير كافٍ!\n💰 السعر: **${item.price}** 💵\n💳 رصيدك: **${user.balance}** 💵`,
+        ephemeral: true 
+      });
+    }
+    
+    const alreadyOwned = user.estates.find(e => e.name === itemName);
+    if (alreadyOwned) {
+      return interaction.reply({ content: '⚠️ أنت تملك هذا بالفعل!', ephemeral: true });
+    }
+    
+    user.balance -= item.price;
+    user.estates.push({ ...item, purchaseDate: Date.now() });
+    
+    return interaction.reply({
+      content: `✅ تم الشراء بنجاح!\n${getEmoji(item.name)} **${item.name}**\n💰 السعر: ${item.price} 💵\n💳 رصيدك المتبقي: ${user.balance} 💵\n📈 ستحصل على +${item.income} يومياً!`,
+      ephemeral: false
+    });
+  }
+});
