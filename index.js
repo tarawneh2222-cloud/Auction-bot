@@ -239,6 +239,116 @@ ${item.name}
     `);
   }
 });
+// 🎮 نظام الألعاب الإضافية
+const cooldowns = new Map();
+
+// 🎰 لعبة الروليت
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const cmd = args.shift().toLowerCase();
+  const userId = message.author.id;
+
+  if (cmd === 'روليت') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب !بداية أولاً');
+    
+    const now = Date.now();
+    if (cooldowns.get(`r_${userId}`) && now - cooldowns.get(`r_${userId}`) < 60000) {
+      return message.reply('⏳ انتظر دقيقة قبل الروليت مرة أخرى!');
+    }
+    
+    const amount = parseInt(args[0]);
+    const u = users.get(userId);
+    if (!amount || amount <= 0) return message.reply('❌ اكتب المبلغ بشكل صحيح: !روليت 500');
+    if (u.balance < amount) return message.reply('❌ رصيدك غير كافٍ!');
+    
+    cooldowns.set(`r_${userId}`, now);
+    const win = Math.random() >= 0.5;
+    
+    if (win) {
+      u.balance += amount;
+      message.reply(`
+🎰 الروليت تدور...
+🟢 فزت! مبروك 🎉
+💰 ربحت: +${amount} 💵
+💳 رصيدك الجديد: ${u.balance} 💵
+      `);
+    } else {
+      u.balance -= amount;
+      message.reply(`
+🎰 الروليت تدور...
+🔴 خسرت 😔
+💰 خسرت: -${amount} 💵
+💳 رصيدك الجديد: ${u.balance} 💵
+      `);
+    }
+  }
+
+  // 📦 لعبة صناديق الكنز
+  if (cmd === 'صناديق') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب !بداية أولاً');
+    
+    const now = Date.now();
+    if (cooldowns.get(`c_${userId}`) && now - cooldowns.get(`c_${userId}`) < 3600000) {
+      return message.reply('⏳ العودة للصناديق بعد ساعة فقط!');
+    }
+    
+    cooldowns.set(`c_${userId}`, now);
+    const u = users.get(userId);
+    const prizes = [
+      { text: '💎 جوهرة نادرة!', value: 5000, rare: true },
+      { text: '💰 كيس ذهب', value: 1500 },
+      { text: '🪙 عملات قديمة', value: 300 },
+      { text: '📝 صندوق فارغ', value: 0 },
+      { text: '💵 حقيبة نقود', value: 800 }
+    ];
+    const prize = prizes[Math.floor(Math.random() * prizes.length)];
+    u.balance += prize.value;
+    
+    let msg = `📦 فتحت الصندوق ووجدت:\n\n${prize.text}`;
+    if (prize.value > 0) msg += `\n\n✅ ربح: +${prize.value} 💵`;
+    else msg += '\n\n😔 لا بأس، حظاً أوفر في المرة القادمة!';
+    msg += `\n💳 رصيدك: ${u.balance} 💵`;
+    
+    message.reply(msg);
+  }
+
+  // 🔮 لعبة حجر الحظ
+  if (cmd === 'حظ') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب !بداية أولاً');
+    
+    const now = Date.now();
+    if (cooldowns.get(`l_${userId}`) && now - cooldowns.get(`l_${userId}`) < 86400000) {
+      return message.reply('⏳ يمكنك معرفة حظك مرة واحدة كل يوم فقط!');
+    }
+    
+    cooldowns.set(`l_${userId}`, now);
+    const u = users.get(userId);
+    const luck = Math.random();
+    let result = '';
+    
+    if (luck > 0.95) {
+      u.balance += 3000;
+      result = `🌟 حظك ممتاز جداً اليوم!\n💰 هدية الحظ: +3000 💵`;
+    } else if (luck > 0.7) {
+      u.balance += 500;
+      result = `✨ يوم جيد ومبشر!\n💰 هدية الحظ: +500 💵`;
+    } else if (luck > 0.3) {
+      result = `😌 يوم عادي، استمر في عملك!`;
+    } else {
+      const loss = Math.min(u.balance, 50);
+      u.balance -= loss;
+      result = `😅 حظ عاثر قليلاً...\n💰 خسارة بسيطة: -${loss} 💵`;
+    }
+    
+    message.reply(`
+🔮 قرأت لك حجر الحظ:
+
+${result}
+💳 رصيدك الحالي: ${u.balance} 💵
+    `);
+  }
+});
 
 // 🔑 تشغيل البوت
 client.login(TOKEN).catch(err => {
