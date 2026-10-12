@@ -10,10 +10,8 @@ const client = new Client({
   ],
 });
 
-// تخزين بيانات اللاعبين
 const users = new Map();
 
-// العقارات المتاحة
 const estates = [
   { id: 'house_small', name: '🏡 منزل صغير', price: 10000, income: 100, desc: 'منزل مريح لبداية الطريق نحو الثروة' },
   { id: 'house_big', name: '🏠 منزل كبير', price: 50000, income: 600, desc: 'مساحة واسعة وعائلة سعيدة' },
@@ -23,7 +21,6 @@ const estates = [
   { id: 'island', name: '🏝️ جزيرة خاصة', price: 10000000, income: 200000, desc: 'قمة النجاح! جزيرتك الخاصة في المحيط' },
 ];
 
-// السوق
 const marketItems = [
   { id: 'gold', name: '🪙 ذهب', price: 2000, desc: 'ملاذ آمن وقت الأزمات' },
   { id: 'diamond', name: '💎 ألماس', price: 15000, desc: 'قيمته لا تنخفض أبداً' },
@@ -32,10 +29,6 @@ const marketItems = [
   { id: 'company', name: '🏢 شركة كاملة', price: 2000000, desc: 'أنت رئيس مجلس الإدارة!' },
 ];
 
-// تصنيف أسبوعي
-let weeklyRanking = [];
-
-// تهيئة بيانات اللاعب
 function initUser(userId, username) {
   if (!users.has(userId)) {
     users.set(userId, {
@@ -52,7 +45,6 @@ function initUser(userId, username) {
   return users.get(userId);
 }
 
-// حساب الثروة الكلية
 function getTotalWealth(user) {
   let total = user.balance + user.bank;
   user.estates.forEach(e => total += estates.find(es => es.id === e)?.price || 0);
@@ -63,13 +55,11 @@ function getTotalWealth(user) {
   return total;
 }
 
-// عند جاهزية البوت
 client.on('ready', () => {
   console.log(`✅ البوت متصل باسم: ${client.user.tag}`);
   client.user.setActivity('إمبراطورية الثروة | !help', { type: 3 });
 });
 
-// معالجة الأزرار
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
 
@@ -108,7 +98,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!item) return interaction.reply({ content: '❌ العنصر غير متاح!', ephemeral: true });
     
     if (user.balance < item.price) {
-      const need = item.price - user.balance;
+      const need = item.price - item.price;
       return interaction.reply({ content: `❌ رصيدك غير كافٍ! تحتاج **${need.toLocaleString()}** عملة إضافية.`, ephemeral: true });
     }
     
@@ -128,7 +118,6 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// معالجة الأوامر النصية
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
   const content = message.content.trim();
@@ -136,7 +125,6 @@ client.on('messageCreate', async message => {
   const user = initUser(userId, message.author.username);
   const prefix = '!';
 
-  // !help — المساعدة
   if (content === `${prefix}help`) {
     const embed = new EmbedBuilder()
       .setColor('#3498db')
@@ -145,16 +133,15 @@ client.on('messageCreate', async message => {
         { name: '👤 حسابك', value: '`!me` — عرض ملفك الشخصي ورصيدك' },
         { name: '💰 دخل يومي', value: '`!daily` — استلام راتبك اليومي + دخل عقاراتك' },
         { name: '🏦 البنك', value: '`!deposit مبلغ` — إيداع في البنك\n`!withdraw مبلغ` — سحب من البنك' },
-        { name: '🏠 العقارات', value: '`!estates` — عرض العقارات المتاحة للشراء (اضغط على الزر للشراء!)' },
+        { name: '🏠 العقارات', value: '`!estates` — عرض العقارات المتاحة للشراء' },
         { name: '📦 ممتلكاتك', value: '`!my-estates` — عرض عقاراتك الحالية\n`!portfolio` — محفظتك الاستثمارية' },
-        { name: '🛒 السوق', value: '`!market` — سلع استثمارية للشراء (اضغط على الزر للشراء!)' },
+        { name: '🛒 السوق', value: '`!market` — سلع استثمارية للشراء' },
         { name: '🏆 التصنيف الأسبوعي', value: '`!top` — قائمة أغنى اللاعبين والألقاب الأسبوعية' },
       )
-      .setFooter({ text: '💡 نصيحة: عند عرض العقارات أو السوق — فقط اضغط على زر الشراء ✅' });
+      .setFooter({ text: '💡 نصيحة: كل عنصر بجانبه زر شراء مباشر ✅' });
     message.channel.send({ embeds: [embed] });
   }
 
-  // !me — ملفي الشخصي
   else if (content === `${prefix}me`) {
     const totalIncome = user.estates.reduce((sum, eId) => {
       const e = estates.find(x => x.id === eId);
@@ -175,7 +162,6 @@ client.on('messageCreate', async message => {
     message.channel.send({ embeds: [embed] });
   }
 
-  // !daily — الراتب اليومي
   else if (content === `${prefix}daily`) {
     const now = Date.now();
     const cooldown = 24 * 60 * 60 * 1000;
@@ -199,7 +185,6 @@ client.on('messageCreate', async message => {
     message.reply(`✅ تم استلام راتبك اليومي!\n💰 الراتب الأساسي: +${base}\n🏡 دخل العقارات: +${estateIncome}\n📦 **المجموع: +${total.toLocaleString()} عملة**`);
   }
 
-  // !deposit — إيداع
   else if (content.startsWith(`${prefix}deposit `)) {
     const amount = parseInt(content.split(' ')[1]);
     if (!amount || amount <= 0) return message.reply('❌ اكتب المبلغ بشكل صحيح: `!deposit 1000`');
@@ -209,7 +194,6 @@ client.on('messageCreate', async message => {
     message.reply(`✅ تم إيداع **${amount.toLocaleString()}** عملة في البنك!\n💰 في البنك الآن: **${user.bank.toLocaleString()}**`);
   }
 
-  // !withdraw — سحب
   else if (content.startsWith(`${prefix}withdraw `)) {
     const amount = parseInt(content.split(' ')[1]);
     if (!amount || amount <= 0) return message.reply('❌ اكتب المبلغ بشكل صحيح: `!withdraw 1000`');
@@ -219,38 +203,42 @@ client.on('messageCreate', async message => {
     message.reply(`✅ تم سحب **${amount.toLocaleString()}** عملة من البنك!\n💰 معك الآن: **${user.balance.toLocaleString()}**`);
   }
 
-  // !estates — عرض العقارات مع أزرار الشراء ✨
   else if (content === `${prefix}estates`) {
     const embed = new EmbedBuilder()
       .setColor('#9b59b6')
       .setTitle('🏠 العقارات المتاحة للشراء')
-      .setDescription('اضغط على زر **شراء** أسفل العقار الذي تريد تملكه 👇')
+      .setDescription('اضغط على الزر بجانب العقار الذي تريد تملكه 👇')
       .setTimestamp();
     
     const rows = [];
     estates.forEach(estate => {
-      const owned = user.estates.includes(estate.id) ? ' ✅ تمتلكه' : '';
+      const owned = user.estates.includes(estate.id);
       embed.addFields({
-        name: `${estate.name}${owned}`,
+        name: estate.name,
         value: `💰 السعر: **${estate.price.toLocaleString()}** عملة\n📈 دخل يومي: +${estate.income.toLocaleString()}\n📝 ${estate.desc}`,
         inline: false
       });
       
-      if (!user.estates.includes(estate.id)) {
+      if (!owned) {
         rows.push(new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`buyest_${estate.id}`)
-            .setLabel(`شراء ${estate.name.split(' ')[0]}`)
+            .setLabel('🛒 شراء')
             .setStyle(ButtonStyle.Success)
-            .setEmoji('🛒')
+        ));
+      } else {
+        rows.push(new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel('✅ مُمتلك')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
         ));
       }
     });
     
-    message.channel.send({ embeds: [embed], components: rows.slice(0, 5) });
+    message.channel.send({ embeds: [embed], components: rows });
   }
 
-  // !my-estates — عقاراتي
   else if (content === `${prefix}my-estates`) {
     if (user.estates.length === 0) {
       return message.reply('❌ أنت لا تمتلك أي عقار حتى الآن! استخدم `!estates` لترى المتاح.');
@@ -266,12 +254,11 @@ client.on('messageCreate', async message => {
     message.channel.send(`🏠 **عقاراتك:**\n${list}\n\n📊 **مجموع الدخل اليومي من العقارات: +${totalIncome.toLocaleString()} عملة**`);
   }
 
-  // !market — السوق مع أزرار الشراء ✨
   else if (content === `${prefix}market`) {
     const embed = new EmbedBuilder()
       .setColor('#e74c3c')
       .setTitle('🛒 سوق الاستثمار')
-      .setDescription('اضغط على زر **شراء** أسفل العنصر الذي تريد استثماره 👇')
+      .setDescription('اضغط على الزر بجانب العنصر الذي تريد استثماره 👇')
       .setTimestamp();
     
     const rows = [];
@@ -285,16 +272,14 @@ client.on('messageCreate', async message => {
       rows.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`buyitem_${item.id}`)
-          .setLabel('شراء')
+          .setLabel('🛒 شراء')
           .setStyle(ButtonStyle.Success)
-          .setEmoji('🛒')
       ));
     });
     
-    message.channel.send({ embeds: [embed], components: rows.slice(0, 5) });
+    message.channel.send({ embeds: [embed], components: rows });
   }
 
-  // !portfolio — محفظتي
   else if (content === `${prefix}portfolio`) {
     if (user.portfolio.length === 0) {
       return message.reply('❌ محفظتك فارغة حالياً! استخدم `!market` لشراء أصول استثمارية.');
@@ -306,7 +291,6 @@ client.on('messageCreate', async message => {
     message.channel.send(`💼 **محفظتك الاستثمارية:**\n${list}`);
   }
 
-  // !top — التصنيف الأسبوعي
   else if (content === `${prefix}top`) {
     const allUsers = Array.from(users.values())
       .map(u => ({ name: u.name, wealth: getTotalWealth(u) }))
