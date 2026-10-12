@@ -724,6 +724,177 @@ client.on('messageCreate', async message => {
     message.reply('✅ تم تحديث أسعار السوق! اكتب `!سوق` للاطلاع عليها 📊');
   }
 });
+// ==============================================
+// 📊 نظام الاستثمار والأصول المتغيرة
+// ==============================================
+
+// قائمة الأصول والأسعار
+const assetsData = {
+  سيارات:      { emoji: '🚗',  basePrice: 86203,   price: 86203,   trend: -1 },
+  أسهم:        { emoji: '📊',  basePrice: 37840,   price: 37840,   trend: -1 },
+  أراضي:       { emoji: '🏙️', basePrice: 127286,  price: 127286,  trend: -1 },
+  قطارات:      { emoji: '🚄',  basePrice: 2027054, price: 2027054, trend: 1  },
+  هواتف:       { emoji: '📱',  basePrice: 20000,   price: 20000,   trend: -1 },
+  شركات:       { emoji: '💻',  basePrice: 80425,   price: 80425,   trend: 0  },
+  سيرفرات:     { emoji: '📺',  basePrice: 37462,   price: 37462,   trend: -1 },
+  بوتات:       { emoji: '🤖',  basePrice: 52964,   price: 52964,   trend: -1 },
+  طائرات:      { emoji: '✈️',  basePrice: 134814,  price: 134814,  trend: -1 },
+  ملاعب:       { emoji: '🏟️', basePrice: 5421179, price: 5421179, trend: -1 },
+  ذهب:         { emoji: '🪙',  basePrice: 2500,    price: 2500,    trend: 0  },
+  فضة:         { emoji: '🥈',  basePrice: 350,     price: 350,     trend: 1  },
+  منازل:       { emoji: '🏠',  basePrice: 15000,   price: 15000,   trend: 1  },
+  مزارع:       { emoji: '🌾',  basePrice: 8500,    price: 8500,    trend: 0  },
+  محلات:       { emoji: '🏪',  basePrice: 12000,   price: 12000,   trend: 1  },
+  فنادق:       { emoji: '🏨',  basePrice: 95000,   price: 95000,   trend: 1  },
+  سفن:         { emoji: '🚢',  basePrice: 450000,  price: 450000,  trend: -1 },
+  طائرات_خاصة:{ emoji: '🛩️',  basePrice: 850000,  price: 850000,  trend: -1 },
+  بنوك:        { emoji: '🏦',  basePrice: 250000,  price: 250000,  trend: 1  },
+  مصانع:       { emoji: '🏭',  basePrice: 150000,  price: 150000,  trend: 0  },
+  متاجر_الكترونية:{ emoji: '🛒', basePrice: 45000, price: 45000, trend: 1 },
+  عقارات_فاخرة:{ emoji: '🏰',  basePrice: 500000,  price: 500000,  trend: 0  },
+  محطات_طاقة:  { emoji: '⚡',  basePrice: 350000,  price: 350000,  trend: 1  },
+  مستشفيات:   { emoji: '🏥',  basePrice: 400000,  price: 400000,  trend: 0  }
+};
+
+// تحديث الأسعار كل ساعة
+function updateAssetPrices() {
+  for (const [name, asset] of Object.entries(assetsData)) {
+    const changePercent = (Math.random() - 0.5) * 0.06; // ±3%
+    asset.price = Math.round(asset.price * (1 + changePercent));
+    asset.price = Math.max(asset.basePrice * 0.5, Math.min(asset.basePrice * 2, asset.price));
+    asset.trend = changePercent > 0.005 ? 1 : changePercent < -0.005 ? -1 : 0;
+  }
+  console.log('📊 تم تحديث أسعار الأصول');
+}
+
+setInterval(updateAssetPrices, 3600000);
+
+// الحصول على محفظة اللاعب
+function getAssetsPortfolio(userId) {
+  const u = users.get(userId);
+  if (!u.assetsPortfolio) u.assetsPortfolio = {};
+  return u.assetsPortfolio;
+}
+
+// ==============================================
+// 💬 أوامر نظام الاستثمار
+// ==============================================
+client.on('messageCreate', async message => {
+  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const cmd = args.shift().normalize();
+  const userId = message.author.id;
+
+  // 📊 عرض الأسعار
+  if (cmd === 'الاسعار' || cmd === 'اسعار') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    
+    let text = '📊 **أسعار السوق الحالية:**\n\n';
+    for (const [name, asset] of Object.entries(assetsData)) {
+      const arrow = asset.trend === 1 ? '📈' : asset.trend === -1 ? '📉' : '➡️';
+      text += `${arrow} ${asset.emoji} ${name}: **${asset.price.toLocaleString()}** $\n`;
+    }
+    text += '\n💡 اشترِ عندما ينخفض السعر، وبِع عندما يرتفع!\nالأوامر: `اشترِ اسم الكمية` — `بيع اسم الكمية`';
+    message.reply(text);
+  }
+
+  // 🛒 شراء
+  if (cmd === 'اشترِ' || cmd === 'اشترى' || cmd === 'شراء') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const assetName = args[0];
+    const quantity = parseInt(args[1]);
+    
+    if (!assetsData[assetName]) {
+      return message.reply('❌ اسم غير صالح! اكتب `!الاسعار` لترى القائمة');
+    }
+    if (!quantity || quantity <= 0) {
+      return message.reply('❌ حدد الكمية! مثال: `اشترِ ذهب 2`');
+    }
+    
+    const totalCost = assetsData[assetName].price * quantity;
+    const u = users.get(userId);
+    const portfolio = getAssetsPortfolio(userId);
+    
+    if (u.balance < totalCost) {
+      return message.reply(`❌ رصيدك غير كافٍ!\nالمطلوب: ${totalCost.toLocaleString()} $\nمتاح: ${u.balance.toLocaleString()} $`);
+    }
+    
+    u.balance -= totalCost;
+    portfolio[assetName] = (portfolio[assetName] || 0) + quantity;
+    saveData();
+    
+    message.reply(`
+✅ **تم الشراء بنجاح!**
+${assetsData[assetName].emoji} ${assetName}
+📦 الكمية: ${quantity} وحدة
+💰 السعر الواحد: ${assetsData[assetName].price.toLocaleString()} $
+💳 المجموع: ${totalCost.toLocaleString()} $
+💵 رصيدك المتبقي: ${u.balance.toLocaleString()} $
+    `);
+  }
+
+  // 💰 بيع
+  if (cmd === 'بيع' || cmd === 'بِع') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const assetName = args[0];
+    const quantity = parseInt(args[1]);
+    
+    if (!assetsData[assetName]) {
+      return message.reply('❌ اسم غير صالح! اكتب `!الاسعار` لترى القائمة');
+    }
+    if (!quantity || quantity <= 0) {
+      return message.reply('❌ حدد الكمية! مثال: `بيع ذهب 1`');
+    }
+    
+    const portfolio = getAssetsPortfolio(userId);
+    if (!portfolio[assetName] || portfolio[assetName] < quantity) {
+      return message.reply(`❌ لا تمتلك كمية كافية!\nلديك: ${portfolio[assetName] || 0} فقط`);
+    }
+    
+    const totalEarn = assetsData[assetName].price * quantity;
+    const u = users.get(userId);
+    
+    portfolio[assetName] -= quantity;
+    if (portfolio[assetName] === 0) delete portfolio[assetName];
+    u.balance += totalEarn;
+    saveData();
+    
+    message.reply(`
+✅ **تم البيع بنجاح!**
+${assetsData[assetName].emoji} ${assetName}
+📦 الكمية المباعة: ${quantity} وحدة
+💰 السعر الحالي: ${assetsData[assetName].price.toLocaleString()} $
+💵 المجموع المضاف: ${totalEarn.toLocaleString()} $
+💳 رصيدك الحالي: ${u.balance.toLocaleString()} $
+    `);
+  }
+
+  // 📦 ممتلكاتي
+  if (cmd === 'ممتلكاتي' || cmd === 'ممتلكات' || cmd === 'محفظتي') {
+    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+    const portfolio = getAssetsPortfolio(userId);
+    let text = '📦 **ممتلكاتك الحالية:**\n\n';
+    let totalValue = 0;
+    let hasItems = false;
+    
+    for (const [name, qty] of Object.entries(portfolio)) {
+      if (qty > 0) {
+        hasItems = true;
+        const value = assetsData[name].price * qty;
+        totalValue += value;
+        text += `${assetsData[name].emoji} ${name}: **${qty} وحدة** — القيمة: ${value.toLocaleString()} $\n`;
+      }
+    }
+    
+    if (!hasItems) {
+      text += '📭 لا تمتلك أي أصول حتى الآن! اكتب `!الاسعار` لتبدأ الاستثمار 📈';
+    } else {
+      text += `\n💰 **إجمالي القيمة:** ${totalValue.toLocaleString()} $`;
+    }
+    
+    message.reply(text);
+  }
+});
 
 
 // ==============================================
