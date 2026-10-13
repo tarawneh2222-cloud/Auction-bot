@@ -382,11 +382,9 @@ const commands = [
     )
     .addSubcommand(s =>
       s.setName('شراء')
-const BOT_TOKEN = "MTU1ODg3MzkwNTgxNTQ4NjYxNQ.GGuvqo.0wJ31XLdu5GEVyaVoDhC9B0mMj1dmdBBhMaWg8";
-
-if (!BOT_TOKEN || BOT_TOKEN === "ضع_توكن_بوتك_هنا") {
-  console.error('❌ لم تقم بوضع التوكن بعد!');
+if (!process.env.DISCORD_TOKEN) {
+  console.error('❌ لم يتم العثور على التوكن في متغيرات البيئة');
   process.exit(1);
 }
 
-client.login(BOT_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
