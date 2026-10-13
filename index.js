@@ -383,11 +383,6 @@ const commands = [
     .addSubcommand(s =>
       s.setName('شراء')
 if (!process.env.DISCORD_TOKEN) {
-  console.error('❌ لم يتم العثور على التوكن في متغيرات البيئة');
-  process.exit(1);
-}
-
-client.login(process.env.DISCORD_TOKEN);
 console.log('🔍 جاري فحص المتغيرات...');
 
 if (!process.env.DISCORD_TOKEN) {
