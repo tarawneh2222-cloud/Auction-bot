@@ -1,20 +1,30 @@
 const { Client, GatewayIntentBits, Collection, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
+const path = require('path'); //
 
-// ─── إعداد ملف البيانات ───
+const DATA_PATH = path.join(__dirname, 'data.json');
+
 let userData = {};
 try {
-  userData = JSON.parse(fs.readFileSync('./data.json', 'utf8'));
-  console.log('✅ تم تحميل بيانات اللاعبين');
-} catch {
+  if (fs.existsSync(DATA_PATH)) {
+    userData = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
+    console.log('✅ تم تحميل بيانات اللاعبين');
+  } else {
+    fs.writeFileSync(DATA_PATH, '{}');
+    userData = {};
+    console.log('📄 ملف بيانات جديد جاهز');
+  }
+} catch (error) {
   userData = {};
-  console.log('📄 ملف بيانات جديد جاهز');
+  console.log('⚠️ خطأ في تحميل البيانات');
 }
+
 
 // ─── دالة الحفظ التلقائي ───
 function saveData() {
   try {
-    fs.writeFileSync('./data.json', JSON.stringify(userData, null, 2));
+    fs.writeFileSync(DATA_PATH, JSON.stringify(userData, null, 2));
+
     return true;
   } catch (e) {
     console.error('❌ خطأ في الحفظ:', e);
