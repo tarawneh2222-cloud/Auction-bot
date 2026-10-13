@@ -62,7 +62,7 @@ client.on('messageCreate', async message => {
     message.reply(`💰 **حسابك:** ${user.money} دولار\n🏠 العقارات: ${user.properties.length}`);
   }
   
-  else if (command === .مساعدة) {
+  else if (command === '.مساعدة') {
     message.reply(`
 **📋 قائمة الأوامر:**
 .حساب - عرض رصيدك
@@ -73,5 +73,4 @@ client.on('messageCreate', async message => {
   saveData();
 });
 
-const TOKEN = process.env.DISCORD_TOKEN;
-client.login(TOKEN);
+client.login(process.env.DISCORD_TOKEN);
