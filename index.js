@@ -1,3 +1,15 @@
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('البوت يعمل! ✅');
+});
+
+app.listen(port, () => {
+  console.log(`الخادم يعمل على المنفذ ${port}`);
+});
+
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
