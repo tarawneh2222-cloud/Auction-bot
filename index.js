@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, Collection, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const TOKEN = process.env.TOKEN;
-const PREFIX = '!';
+const PREFIX = '.';
 
 const client = new Client({
   intents: [
