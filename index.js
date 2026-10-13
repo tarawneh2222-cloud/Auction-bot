@@ -67,7 +67,31 @@ client.on('messageCreate', async message => {
 **📋 قائمة الأوامر:**
 .حساب - عرض رصيدك
 .مساعدة - عرض هذه القائمة
+.تعويض @الشخص المبلغ - إضافة مبلغ لشخص (للمدراء فقط)
     `);
+  }
+
+  // ✅ أمر التعويض
+  else if (command === '.تعويض') {
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ ليس لديك صلاحية لاستخدام هذا الأمر!');
+    }
+    
+    const target = message.mentions.users.first();
+    const amount = parseInt(args[1]);
+    
+    if (!target) {
+      return message.reply('❌ الرجاء تحديد الشخص! مثال: .تعويض @الاسم 5000');
+    }
+    if (!amount || amount <= 0) {
+      return message.reply('❌ الرجاء كتابة المبلغ بشكل صحيح! مثال: .تعويض @الاسم 5000');
+    }
+    
+    const targetUser = getUser(target.id);
+    targetUser.money += amount;
+    saveData();
+    
+    message.reply(`✅ **تم التعويض بنجاح!**\n👤 اللاعب: ${target.username}\n💵 المبلغ المُضاف: ${amount} دولار\n💰 رصيده الحالي: ${targetUser.money} دولار`);
   }
   
   saveData();
