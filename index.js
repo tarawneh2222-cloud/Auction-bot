@@ -388,3 +388,19 @@ if (!process.env.DISCORD_TOKEN) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
+console.log('🔍 جاري فحص المتغيرات...');
+
+if (!process.env.DISCORD_TOKEN) {
+  console.error('❌ لم يتم العثور على DISCORD_TOKEN في متغيرات البيئة');
+  console.log('💡 تأكد من إضافته في قسم Environment في Render');
+  process.exit(1);
+} else {
+  console.log('✅ تم العثور على التوكن! الطول:', process.env.DISCORD_TOKEN.length);
+}
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log('✅ البوت متصل بنجاح! 🎉'))
+  .catch(err => {
+    console.error('❌ خطأ في تسجيل الدخول:', err.message);
+    process.exit(1);
+  });
