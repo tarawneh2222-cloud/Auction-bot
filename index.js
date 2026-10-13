@@ -1,1205 +1,371 @@
-const { Client, GatewayIntentBits, Collection, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const TOKEN = process.env.TOKEN;
-const PREFIX = '.';
+const { Client, GatewayIntentBits, Collection, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const fs = require('fs');
 
+// ─── إعداد ملف البيانات ───
+let userData = {};
+try {
+  userData = JSON.parse(fs.readFileSync('./data.json', 'utf8'));
+  console.log('✅ تم تحميل بيانات اللاعبين');
+} catch {
+  userData = {};
+  console.log('📄 ملف بيانات جديد جاهز');
+}
+
+// ─── دالة الحفظ التلقائي ───
+function saveData() {
+  try {
+    fs.writeFileSync('./data.json', JSON.stringify(userData, null, 2));
+    return true;
+  } catch (e) {
+    console.error('❌ خطأ في الحفظ:', e);
+    return false;
+  }
+}
+
+// ─── دالة جلب بيانات اللاعب ───
+function getUser(id) {
+  if (!userData[id]) {
+    userData[id] = {
+      money: 1000,
+      dailyClaimed: null,
+      inventory: [],
+      stocks: {},
+      rareItems: [],
+      netWorth: 1000
+    };
+  }
+  return userData[id];
+}
+
+// ─── إعداد البوت ───
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
-client.login(TOKEN).catch(err => console.error('❌ خطأ في تسجيل الدخول:', err));
+const prefix = '.';
+const TOKEN = process.env.DISCORD_TOKEN;
 
-// ==============================================
-// 💾 قاعدة البيانات
-// ==============================================
-const fs = require('fs');
-const path = require('path');
-const DATA_FILE = path.join(__dirname, 'data.json');
+// ─── حالة تشغيل البوت ───
+client.on('ready', () => {
+  console.log(`✅ البوت متصل باسم: ${client.user.tag}`);
+});
 
-let users = new Map();
+// ─── بيانات السوق والمنتجات ───
+const MARKET_ITEMS = [
+  { id: 1, name: 'شقة صغيرة', price: 5000, income: 50 },
+  { id: 2, name: 'منزل واسع', price: 15000, income: 180 },
+  { id: 3, name: 'محل تجاري', price: 30000, income: 400 },
+  { id: 4, name: 'مبنى سكني', price: 80000, income: 1200 },
+  { id: 5, name: 'قصر فاخر', price: 500000, income: 8000 }
+];
 
-function loadData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-      users = new Map(Object.entries(data));
-    }
-  } catch (e) {
-    console.log('⚠️ لم يتم العثور على ملف بيانات جديد، سيتم إنشاؤه تلقائياً');
-  }
-}
+const COMPANIES = [
+  { symbol: 'GOLD', name: 'معدن الذهب', price: 1000, change: 0 },
+  { symbol: 'OIL', name: 'شركة النفط', price: 800, change: 0 },
+  { symbol: 'TECH', name: 'شركة التقنية', price: 500, change: 0 },
+  { symbol: 'FOOD', name: 'شركة الغذاء', price: 200, change: 0 }
+];
 
-function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(Object.fromEntries(users), null, 2));
-}
-
-loadData();
-
-// ==============================================
-// 📊 بيانات اللعبة
-// ==============================================
-const shops = {
-  عقارات: [
-    { id: 'house1', name: '🏠 منزل صغير', price: 1000, desc: 'يعطيك 50 💵 يومياً', income: 50 },
-    { id: 'house2', name: '🏡 منزل عائلي', price: 5000, desc: 'يعطيك 300 💵 يومياً', income: 300 },
-    { id: 'building', name: '🏢 مبنى سكني', price: 20000, desc: 'يعطيك 1500 💵 يومياً', income: 1500 },
-    { id: 'tower', name: '🗼 برج تجاري', price: 100000, desc: 'يعطيك 10000 💵 يومياً', income: 10000 }
-  ],
-  أعمال: [
-    { id: 'shop', name: '🏪 محل تجاري', price: 3000, desc: 'يعطيك 150 💵 يومياً', income: 150 },
-    { id: 'restaurant', name: '🍽️ مطعم', price: 15000, desc: 'يعطيك 800 💵 يومياً', income: 800 },
-    { id: 'factory', name: '🏭 مصنع', price: 80000, desc: 'يعطيك 5000 💵 يومياً', income: 5000 }
-  ],
-  استثمارات: [
-    { id: 'gold', name: '🪙 ذهب', price: 2000, desc: 'قد يرتفع سعره أو ينخفض أسبوعياً', volatile: true },
-    { id: 'stocks', name: '📈 أسهم شركة', price: 5000, desc: 'عائد أسبوعي متغير', volatile: true },
-    { id: 'land', name: '🌍 أرض', price: 10000, desc: 'تزداد قيمتها بمرور الوقت', income: 200 }
-  ]
+let auctionData = {
+  active: false,
+  itemName: '',
+  itemDesc: '',
+  highestBid: 0,
+  highestBidder: null,
+  endTime: null,
+  bids: []
 };
 
-const dailyRewards = new Map();
-const weeklyRankings = new Map();
-
-// ==============================================
-// 💬 معالج الأوامر الأساسية
-// ==============================================
+// ─── معالجة الأوامر ───
 client.on('messageCreate', async message => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
+  if (message.author.bot) return;
+  if (!message.content.startsWith(prefix)) return;
+
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift()?.toLowerCase();
   const userId = message.author.id;
+  const user = getUser(userId);
 
-  // � بداية اللعبة
-  if (cmd === 'بداية') {
-    if (users.has(userId)) return message.reply('✅ لديك حساب بالفعل! اكتب `!رصيد` لمعرفة رصيدك');
-    users.set(userId, {
-      balance: 1000,
-      level: 1,
-      exp: 0,
-      investments: [],
-      createdAt: Date.now(),
-      lastDaily: 0
-    });
-    saveData();
-    message.reply(`
-🎉 أهلاً بك في لعبة إمبراطورية الثروة!
-
-💰 رصيدك الأولي: **1000 💵**
-
-📋 الأوامر الأساسية:
-!رصيد — معرفة رصيدك
-!يومي — جمع مكافأتك اليومية
-!متجر — شراء العقارات والأعمال
-!استثمارات — استثماراتك الحالية
-!أوامر — عرض جميع الأوامر
-    `);
+  // ─── الحساب ───
+  if (command === 'حساب') {
+    message.reply(`💰 **رصيدك:** ${user.money.toLocaleString()} عملة\n📦 **ممتلكات:** ${user.inventory.length}\n🏆 **قطع نادرة:** ${user.rareItems.length}`);
   }
 
-  // 💰 عرض الرصيد
-  if (cmd === 'رصيد') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً لإنشاء حسابك!');
-    const u = users.get(userId);
-    const totalAssets = u.balance + u.investments.reduce((sum, i) => sum + (i.price || 0), 0);
-    message.reply(`
-💳 **معلومات حسابك:**
-💰 الرصيد النقدي: ${u.balance} 💵
-📊 إجمالي الثروة: ${totalAssets} 💵
-⭐ المستوى: ${u.level}
-📅 تاريخ التسجيل: ${new Date(u.createdAt).toLocaleDateString('ar-SA')}
-    `);
-  }
-
-  // 📅 المكافأة اليومية
-  if (cmd === 'يومي') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const now = Date.now();
-    const u = users.get(userId);
-    if (now - u.lastDaily < 86400000) {
-      const hoursLeft = Math.ceil((86400000 - (now - u.lastDaily)) / 3600000);
-      return message.reply(`⏳ عُد بعد ${hoursLeft} ساعة لجمع مكافأتك اليومية!`);
+  // ─── مكافأة يومية ───
+  else if (command === 'يومي') {
+    const today = new Date().toDateString();
+    if (user.dailyClaimed === today) {
+      return message.reply('⏳ لقد استلمت مكافأتك اليوم! عد غداً');
     }
-    u.lastDaily = now;
-    u.balance += 200;
+    user.money += 500;
+    user.dailyClaimed = today;
     saveData();
-    message.reply(`✅ تم جمع مكافأتك اليومية: +200 💵\n💰 رصيدك الحالي: ${u.balance} 💵`);
+    message.reply('✅ تم استلام **500 عملة** — أعود غداً لمكافأة جديدة!');
   }
 
-  // 🏪 المتجر
-  if (cmd === 'متجر') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    let text = '🏪 **المتجر — ما الذي تريد شراءه؟**\n\n';
-    for (const [cat, items] of Object.entries(shops)) {
-      text += `━━ 📂 ${cat} ━━\n`;
-      items.forEach(item => {
-        text += `${item.name} — ${item.price} 💵\n📝 ${item.desc}\nاكتب: !شراء ${item.id}\n\n`;
-      });
-    }
-    text += '💡 نصيحة: استثمر أموالك لتنميتها!';
-    message.reply(text);
+  // ─── الترتيب الأسبوعي ───
+  else if (command === 'ترتيب') {
+    const sorted = Object.entries(userData)
+      .map(([id, u]) => ({ id, money: u.money }))
+      .sort((a, b) => b.money - a.money)
+      .slice(0, 5);
+    
+    let list = '🏆 **أغنى اللاعبين:**\n';
+    sorted.forEach((p, i) => {
+      list += `${i+1}. <@${p.id}> — ${p.money.toLocaleString()}\n`;
+    });
+    message.reply(list);
   }
 
-  // 🛒 الشراء
-  if (cmd === 'شراء') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const itemId = args[0];
-    let found = null;
-    for (const items of Object.values(shops)) {
-      found = items.find(i => i.id === itemId);
-      if (found) break;
-    }
-    if (!found) return message.reply('❌ هذا العنصر غير موجود! اكتب `!متجر` لترى القائمة');
-    const u = users.get(userId);
-    if (u.balance < found.price) return message.reply('❌ رصيدك غير كافٍ!');
-    u.balance -= found.price;
-    u.investments.push({ ...found, purchasedAt: Date.now() });
+  // ─── السوق ───
+  else if (command === 'سوق') {
+    let list = '🏠 **السوق العقاري:**\n';
+    MARKET_ITEMS.forEach(item => {
+      list += `${item.id}. ${item.name} — ${item.price.toLocaleString()} 💰 | دخل يومي: ${item.income}\n`;
+    });
+    message.reply(list);
+  }
+
+  // ─── شراء ───
+  else if (command === 'اشترِ') {
+    const id = parseInt(args[0]);
+    const item = MARKET_ITEMS.find(i => i.id === id);
+    if (!item) return message.reply('❌ رقم غير صالح! استخدم `.سوق` لمعرفة الأرقام');
+    if (user.inventory.some(i => i.id === item.id)) return message.reply('⚠️ تمتلك هذا العنصر مسبقاً!');
+    if (user.money < item.price) return message.reply('❌ رصيدك غير كافٍ!');
+    
+    user.money -= item.price;
+    user.inventory.push({ ...item, purchaseDate: new Date().toISOString() });
     saveData();
-    message.reply(`
-✅ **تم الشراء بنجاح!**
-${found.name}
-💰 السعر: ${found.price} 💵
-💳 رصيدك المتبقي: ${u.balance} 💵
-📝 ${found.desc}
-    `);
+    message.reply(`✅ تم شراء **${item.name}** بنجاح! دخل يومي +${item.income}`);
   }
 
-  // 📦 استثماراتي
-  if (cmd === 'استثماراتي') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const u = users.get(userId);
-    if (u.investments.length === 0) return message.reply('📦 لا تمتلك أي استثمارات حتى الآن! اكتب `!متجر` لتبدأ');
-    let text = '📦 **استثماراتك الحالية:**\n\n';
-    u.investments.forEach((inv, idx) => {
-      text += `${idx + 1}. ${inv.name}\n📝 ${inv.desc}\n\n`;
+  // ─── ممتلكاتي ───
+  else if (command === 'ممتلكاتي') {
+    if (user.inventory.length === 0) return message.reply('📦 لا تمتلك أي عقار حتى الآن! استخدم `.سوق` للبدء');
+    let list = '📦 **ممتلكاتك:**\n';
+    user.inventory.forEach((item, i) => {
+      list += `${i+1}. ${item.name} | دخل يومي: ${item.income}\n`;
     });
-    message.reply(text);
+    message.reply(list);
   }
 
-  // 🏆 التصنيف الأسبوعي
-  if (cmd === 'تصنيف') {
-    const list = Array.from(users.entries())
-      .map(([id, u]) => ({ id, name: client.users.cache.get(id)?.username || 'مستخدم', balance: u.balance }))
-      .sort((a, b) => b.balance - a.balance)
-      .slice(0, 10);
+  // ─── بيع ───
+  else if (command === 'بع') {
+    const idx = parseInt(args[0]) - 1;
+    if (!user.inventory[idx]) return message.reply('❌ رقم غير صالح! استخدم `.ممتلكاتي`');
     
-    if (list.length === 0) return message.reply('📋 لا يوجد لاعبون مسجلون حتى الآن!');
-    
-    let text = '🏆 **أغنى 10 لاعبين**\n\n';
-    list.forEach((p, i) => {
-      let badge = '';
-      if (i === 0) badge = '👑 ';
-      else if (i === 1) badge = '🥈 ';
-      else if (i === 2) badge = '🥉 ';
-      text += `${badge}${i + 1}. ${p.name} — ${p.balance} 💵\n`;
-    });
-    message.reply(text);
+    const item = user.inventory[idx];
+    const sellPrice = Math.floor(item.price * 0.7);
+    user.money += sellPrice;
+    user.inventory.splice(idx, 1);
+    saveData();
+    message.reply(`✅ بعت **${item.name}** بـ ${sellPrice.toLocaleString()} عملة`);
   }
 
-  // 📖 جميع الأوامر
-  if (cmd === 'أوامر') {
-    message.reply(`
-📖 **قائمة جميع الأوامر:**
-
-🔹 **الأساسيات:**
-!بداية — إنشاء حساب جديد
-!رصيد — عرض رصيدك ومعلوماتك
-!يومي — جمع مكافأتك اليومية
-!تصنيف — عرض أغنى اللاعبين
-
-🔹 **الشراء والاستثمار:**
-!متجر — عرض المتجر والسلع المتاحة
-!شراء [المعرف] — شراء سلعة من المتجر
-!استثماراتي — عرض ما تمتلكه
-
-🔹 **الألعاب التفاعلية:**
-!روليت [المبلغ] — راهن واضاعف مالك
-!صناديق — افتح صندوق الكنز كل ساعة
-!حظ — تعرف على حظك اليومي
-!سباق — ابدأ سباق سيارات جماعي
-!تحدي @الشخص — تحدي لاعب آخر
-!كنز — ابحث عن الكنز المخفي
-!سعر — خمن سعر السلعة واربح
-    `);
-  }
-
-  // 🎰 روليت
-  if (cmd === 'روليت') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً');
-    const amount = parseInt(args[0]);
-    const u = users.get(userId);
-    if (!amount || amount <= 0) return message.reply('❌ استخدم: !روليت 500');
-    if (u.balance < amount) return message.reply('❌ رصيدك غير كافٍ!');
+  // ─── الألعاب ───
+  else if (command === 'روليت') {
+    const bet = parseInt(args[0]);
+    if (!bet || bet < 100) return message.reply('❌ استخدم: `.روليت المبلغ` — الحد الأدنى 100');
+    if (user.money < bet) return message.reply('❌ رصيدك غير كافٍ!');
     
-    const win = Math.random() >= 0.5;
+    const win = Math.random() > 0.5;
     if (win) {
-      u.balance += amount;
-      message.reply(`🎰 الروليت تدور...\n🟢 فزت! مبروك 🎉\n💰 ربحت: +${amount} 💵\n💳 رصيدك: ${u.balance} 💵`);
+      user.money += bet;
+      message.reply(`🎉 فزت! أضفت **+${bet.toLocaleString()}** إلى رصيدك!`);
     } else {
-      u.balance -= amount;
-      message.reply(`🎰 الروليت تدور...\n🔴 خسرت 😔\n💰 خسرت: -${amount} 💵\n💳 رصيدك: ${u.balance} 💵`);
+      user.money -= bet;
+      message.reply(`😢 خسرت! خُصم **-${bet.toLocaleString()}** من رصيدك`);
     }
     saveData();
   }
 
-  // 📦 صناديق الكنز
-  if (cmd === 'صناديق') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً');
-    const u = users.get(userId);
-    const prizes = [
-      { text: '💎 جوهرة نادرة!', value: 5000 },
-      { text: '💰 كيس ذهب', value: 1500 },
-      { text: '🪙 عملات قديمة', value: 300 },
-      { text: '📝 صندوق فارغ', value: 0 },
-      { text: '💵 حقيبة نقود', value: 800 }
-    ];
-    const prize = prizes[Math.floor(Math.random() * prizes.length)];
-    u.balance += prize.value;
-    let msg = `📦 فتحت الصندوق ووجدت:\n\n${prize.text}`;
-    msg += prize.value > 0 ? `\n\n✅ ربح: +${prize.value} 💵` : '\n\n😔 لا بأس، حظاً أوفر!';
-    msg += `\n💳 رصيدك: ${u.balance} 💵`;
-    message.reply(msg);
+  else if (command === 'صناديق') {
+    const prize = Math.floor(Math.random() * 500) + 100;
+    user.money += prize;
     saveData();
+    message.reply(`📦 فتحت الصندوق ووجدت **${prize} عملة** بداخله! 🪙`);
   }
 
-  // 🔮 حظ
-  if (cmd === 'حظ') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً');
-    const u = users.get(userId);
-    const luck = Math.random();
-    let result = '';
-    if (luck > 0.95) {
-      u.balance += 3000;
-      result = '🌟 حظك ممتاز جداً اليوم!\n💰 هدية الحظ: +3000 💵';
-    } else if (luck > 0.7) {
-      u.balance += 500;
-      result = '✨ يوم جيد ومبشر!\n💰 هدية الحظ: +500 💵';
-    } else if (luck > 0.3) {
-      result = '😌 يوم عادي، استمر في عملك!';
-    } else {
-      const loss = Math.min(u.balance, 50);
-      u.balance -= loss;
-      result = `😅 حظ عاثر قليلاً...\n💰 خسارة بسيطة: -${loss} 💵`;
-    }
-    message.reply(`🔮 قرأت لك حجر الحظ:\n\n${result}\n💳 رصيدك: ${u.balance} 💵`);
-    saveData();
-  }
-});
-// ==============================================
-// 🎮 الألعاب الإضافية
-// ==============================================
-const gameCooldowns = new Map();
-
-function getCooldown(key, id, ms) {
-  const now = Date.now();
-  const fullKey = `${key}_${id}`;
-  if (gameCooldowns.get(fullKey) && now - gameCooldowns.get(fullKey) < ms) {
-    return Math.ceil((ms - (now - gameCooldowns.get(fullKey))) / 1000);
-  }
-  gameCooldowns.set(fullKey, now);
-  return 0;
-}
-
-// 🏎️ سباق السيارات
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
-  const userId = message.author.id;
-
-  if (cmd === 'سباق') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const cd = getCooldown('race', userId, 120000);
-    if (cd > 0) return message.reply(`⏳ انتظر ${cd} ثانية قبل سباق آخر!`);
-
-    const cars = ['🏎️', '🚗', '🚙', '🚕', '🏁'];
-    const players = [
-      { name: message.author.username, emoji: cars[Math.floor(Math.random()*cars.length)], pos: 0 }
-    ];
-    
-    message.reply(`🏁 بدأ السباق! سأبدأ أنا أولاً...\nاكتب **!انضم** خلال 15 ثانية للمشاركة!`);
-    
-    const waitMsg = message;
-    const joinCollector = message.channel.createMessageCollector({ 
-      filter: m => m.content === '!انضم' && !m.author.bot,
-      time: 15000
-    });
-    
-    joinCollector.on('collect', m => {
-      if (!users.has(m.author.id)) return;
-      players.push({ name: m.author.username, emoji: cars[Math.floor(Math.random()*cars.length)], pos: 0 });
-      m.reply(`✅ انضم ${m.author.username} للسباق!`);
-    });
-    
-    joinCollector.on('end', async () => {
-      if (players.length < 2) {
-        return message.channel.send('⏳ لم ينضم عدد كافٍ من اللاعبين! ابدأ سباقاً جديداً.');
-      }
-      
-      message.channel.send(`🏁 السباق يبدأ بـ ${players.length} متسابقين!`);
-      const goal = 15;
-      let winner = null;
-      
-      while (!winner) {
-        let display = '';
-        for (const p of players) {
-          const move = Math.random() > 0.3 ? Math.floor(Math.random()*3)+1 : 0;
-          p.pos = Math.min(goal, p.pos + move);
-          const track = '█'.repeat(p.pos) + '░'.repeat(goal - p.pos);
-          display += `${p.emoji} ${p.name}\n${track} ${p.pos}/${goal}\n\n`;
-          if (p.pos >= goal && !winner) winner = p;
-        }
-        const m = await message.channel.send(display);
-        await new Promise(r => setTimeout(r, 700));
-        await m.delete().catch(()=>{});
-      }
-      
-      const prize = players.length * 100;
-      const winnerId = players.find(p => p.name === winner.name)?.id || userId;
-      if (!users.has(winnerId)) users.set(winnerId, { balance: 0 });
-      users.get(winnerId).balance += prize;
-      
-      message.channel.send(`🏆 فاز **${winner.emoji} ${winner.name}**!\n💰 الجائزة: +${prize} 💵`);
+  else if (command === 'حظ') {
+    const roll = Math.random();
+    if (roll > 0.85) {
+      const big = Math.floor(Math.random() * 1000) + 500;
+      user.money += big;
       saveData();
-    });
-  }
-
-  // 🗺️ البحث عن الكنز
-  if (cmd === 'كنز') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const cd = getCooldown('treasure', userId, 1800000);
-    if (cd > 0) return message.reply(`⏳ عُد بعد ${Math.ceil(cd/60)} دقيقة!`);
-
-    const areas = ['🌲 الغابة', '🕳️ الكهف', '🌊 النهر', '⛰️ القمة'];
-    const correct = Math.floor(Math.random() * 4);
-    let attempts = 3;
-    
-    message.reply(`🗺️ اختر منطقة للبحث:\n1️⃣ ${areas[0]}\n2️⃣ ${areas[1]}\n3️⃣ ${areas[2]}\n4️⃣ ${areas[3]}\n\nاكتب الرقم! لديك 3 محاولات`);
-    
-    const filter = m => m.author.id === userId && /^[1-4]$/.test(m.content);
-    const collector = message.channel.createMessageCollector({ filter, time: 60000 });
-    
-    collector.on('collect', m => {
-      const choice = parseInt(m.content) - 1;
-      attempts--;
-      
-      if (choice === correct) {
-        collector.stop();
-        const prize = Math.random() > 0.8 ? 3000 : Math.random() > 0.5 ? 800 : 150;
-        const u = users.get(userId);
-        u.balance += prize;
-        saveData();
-        m.reply(`💎 وجدت الكنز في **${areas[choice]}**!\n💰 ربح: +${prize} 💵`);
-      } else if (attempts > 0) {
-        m.reply(`🔍 لا يوجد شيء هنا! تبقى ${attempts} محاولات`);
-      } else {
-        collector.stop();
-        m.reply(`😔 انتهت المحاولات! الكنز كان في **${areas[correct]}**`);
-      }
-    });
-  }
-
-  // 🏷️ تخمين السعر
-  if (cmd === 'سعر') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const cd = getCooldown('price', userId, 60000);
-    if (cd > 0) return message.reply(`⏳ انتظر ${cd} ثانية!`);
-
-    const items = [
-      { name: 'ساعة ذكية ⌚', min: 100, max: 500 },
-      { name: 'حقيبة فاخرة 👜', min: 200, max: 800 },
-      { name: 'هاتف محمول 📱', min: 800, max: 2000 },
-      { name: 'دراجة هوائية 🚴', min: 300, max: 1200 }
-    ];
-    const item = items[Math.floor(Math.random() * items.length)];
-    const actualPrice = Math.floor(Math.random() * (item.max - item.min)) + item.min;
-    
-    message.reply(`🏷️ **خمن سعر: ${item.name}**\n💡 بين ${item.min} و ${item.max} عملة\nاكتب رقمك في الدردشة! لديك 30 ثانية ⏳`);
-    
-    const guesses = new Map();
-    const filter = m => !isNaN(parseInt(m.content)) && parseInt(m.content) > 0;
-    const collector = message.channel.createMessageCollector({ filter, time: 30000 });
-    
-    collector.on('collect', m => {
-      if (!guesses.has(m.author.id)) {
-        guesses.set(m.author.id, parseInt(m.content));
-        m.react('✅');
-      }
-    });
-    
-    collector.on('end', () => {
-      if (guesses.size === 0) {
-        return message.channel.send(`⏳ انتهى الوقت! السعر الحقيقي كان: **${actualPrice}** 💵`);
-      }
-      
-      let closestId = null, minDiff = Infinity;
-      for (const [gId, g] of guesses) {
-        const diff = Math.abs(g - actualPrice);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestId = gId;
-        }
-      }
-      
-      const prize = Math.floor(actualPrice * 0.05);
-      if (!users.has(closestId)) users.set(closestId, { balance: 0 });
-      users.get(closestId).balance += prize;
+      message.reply(`🌟 حظ سعيد جداً! ربحت **${big} عملة**!`);
+    } else if (roll > 0.5) {
+      const small = Math.floor(Math.random() * 100) + 50;
+      user.money += small;
       saveData();
-      
-      message.channel.send(`
-⏰ انتهى الوقت! السعر الحقيقي: **${actualPrice}** 💵
-
-🏆 الفائز: <@${closestId}> — تخمينك: ${guesses.get(closestId)}
-💰 الربح: +${prize} 💵
-      `);
-    });
-  }
-
-  // ⚔️ تحدي لاعب آخر
-  if (cmd === 'تحدي' && message.mentions.users.size > 0) {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const target = message.mentions.users.first();
-    if (target.id === userId) return message.reply('❌ لا يمكنك تحدي نفسك!');
-    
-    message.reply(`⚔️ **${message.author.username}** يتحدى **${target.username}**!\n\nعلى ${target.username} الرد بكتابة **!اقبل** خلال 30 ثانية`);
-    
-    const confirmFilter = m => m.content === '!اقبل' && m.author.id === target.id;
-    const confirm = message.channel.createMessageCollector({ filter: confirmFilter, time: 30000 });
-    
-    confirm.on('collect', () => {
-      confirm.stop();
-      message.channel.send(`⚔️ بدأت المعركة!\nاختيارات: 1=⚔️ هجوم | 2=🛡️ دفاع | 3=✨ ضربة قوية\nاكتب الرقم في الدردشة!`);
-      
-      const choices = new Map();
-      const choiceFilter = m => ['1','2','3'].includes(m.content) && 
-        [userId, target.id].includes(m.author.id);
-      
-      const choiceCol = message.channel.createMessageCollector({ filter: choiceFilter, time: 30000 });
-      
-      choiceCol.on('collect', m => {
-        choices.set(m.author.id, m.content);
-        m.react('✅');
-        if (choices.size === 2) choiceCol.stop();
-      });
-      
-      choiceCol.on('end', () => {
-        if (choices.size < 2) {
-          return message.channel.send('⏳ لم يكمل اللاعبون اختياراتهم!');
-        }
-        
-        const p1c = choices.get(userId);
-        const p2c = choices.get(target.id);
-        const names = { '1':'⚔️ هجوم', '2':'🛡️ دفاع', '3':'✨ ضربة قوية' };
-        
-        let result = '';
-        const beats = { '1':'2', '2':'3', '3':'1' };
-        
-        if (p1c === p2c) {
-          result = '🤝 تعادل! لا أحد يربح ولا يخسر';
-        } else if (beats[p1c] === p2c) {
-          const p = users.get(userId);
-          p.balance += 200;
-          result = `🏆 فاز **${message.author.username}**!\n💰 +200 💵`;
-        } else {
-          const t = users.get(target.id);
-          t.balance += 200;
-          result = `🏆 فاز **${target.username}**!\n💰 +200 💵`;
-        }
-        
-        message.channel.send(`
-⚔️ النتيجة:
-
-**${message.author.username}**: ${names[p1c]}
-**${target.username}**: ${names[p2c]}
-
-${result}
-        `);
-        saveData();
-      });
-    });
-    
-    confirm.on('end', () => {
-      if (!confirm.collected.size) {
-        message.channel.send(`⏳ لم يقبل التحدي في الوقت المحدد.`);
-      }
-    });
-  }
-});
-
-// ==============================================
-// 📈 نظام التداول والأسواق المالية
-// ==============================================
-
-// أسعار السوق الأساسية
-const marketAssets = {
-  GOLD:   { name: '🪙 ذهب',               price: 1000,  change: 0, minPrice: 600,  maxPrice: 2000  },
-  STOCK:  { name: '📈 أسهم شركات',         price: 500,   change: 0, minPrice: 200,  maxPrice: 1200  },
-  COIN:   { name: '💱 عملة رقمية',         price: 100,   change: 0, minPrice: 30,   maxPrice: 500   },
-  GEM:    { name: '💎 أحجار كريمة',        price: 2000,  change: 0, minPrice: 1000, maxPrice: 4000  },
-  REAL:   { name: '🏡 عقارات سوقية',       price: 1500,  change: 0, minPrice: 800,  maxPrice: 3000  }
-};
-
-const newsEvents = [
-  { text: '🌟 استقرار اقتصادي', effect: { STOCK: 1.08 }, msg: 'ارتفاع الأسهم بنسبة 8% ⬆️' },
-  { text: '⚒️ اكتشاف منجم ذهب جديد', effect: { GOLD: 0.92 }, msg: 'انخفاض الذهب بنسبة 8% ⬇️ — فرصة شراء!' },
-  { text: '🔥 طلب عالمي على العقارات', effect: { REAL: 1.12 }, msg: 'ارتفاع العقارات بنسبة 12% ⬆️' },
-  { text: '🚀 تحديث تكنولوجي كبير', effect: { COIN: 1.20 }, msg: 'قفزة العملة الرقمية بنسبة 20% ⚡⬆️' },
-  { text: '📉 توترات اقتصادية عالمية', effect: { GOLD: 1.05, STOCK: 0.90 }, msg: 'الذهب ملاذ آمن +5% ⬆️ والأسهم تنخفض ⬇️' },
-  { text: '💎 معرض أحجار كريمة نادرة', effect: { GEM: 1.15 }, msg: 'ارتفاع الأحجار الكريمة بنسبة 15% ⬆️' },
-  { text: '🏗️ مشاريع تطوير عقاري ضخمة', effect: { REAL: 1.07, STOCK: 1.04 }, msg: 'سوق العقارات والأسهم يزدهر ⬆️' },
-  { text: '🌊 هدوء في الأسواق', effect: {}, msg: 'الأسواق مستقرة حالياً 🙂' }
-];
-
-// محفظة كل لاعب
-function getPortfolio(userId) {
-  const u = users.get(userId);
-  if (!u.portfolio) u.portfolio = { GOLD:0, STOCK:0, COIN:0, GEM:0, REAL:0, lastUpdate: Date.now() };
-  return u.portfolio;
-}
-
-// تحديث أسعار السوق عشوائياً
-function updateMarketPrices() {
-  for (const [symbol, asset] of Object.entries(marketAssets)) {
-    const volatility = symbol === 'COIN' ? 0.08 : symbol === 'STOCK' ? 0.04 : 0.02;
-    const change = 1 + (Math.random() - 0.5) * 2 * volatility;
-    asset.price = Math.round(asset.price * change);
-    asset.price = Math.max(asset.minPrice, Math.min(asset.maxPrice, asset.price));
-    asset.change = Math.round((change - 1) * 1000) / 10;
-  }
-}
-
-// تشغيل حدث عشوائي
-function triggerRandomNews(channel) {
-  const news = newsEvents[Math.floor(Math.random() * newsEvents.length)];
-  let effectText = '';
-  
-  for (const [sym, multiplier] of Object.entries(news.effect)) {
-    marketAssets[sym].price = Math.round(marketAssets[sym].price * multiplier);
-    marketAssets[sym].price = Math.max(marketAssets[sym].minPrice, Math.min(marketAssets[sym].maxPrice, marketAssets[sym].price));
-    marketAssets[sym].change = Math.round((multiplier - 1) * 1000) / 10;
-    effectText += `${marketAssets[sym].name}: ${marketAssets[sym].price} 💵\n`;
-  }
-  
-  channel.send(`
-📰 **خبر عاجل:** ${news.text}
-📢 ${news.msg}
-${effectText}
-⏰ السوق يتغير باستمرار — اغتنم الفرصة!
-  `);
-}
-
-// تحديث الأسعار كل ساعة
-setInterval(() => {
-  updateMarketPrices();
-  console.log('📈 تم تحديث أسعار السوق');
-}, 3600000);
-
-// أخبار عشوائية كل 2-4 ساعات
-setInterval(() => {
-  // سيتم تشغيلها عند توفر قناة — نعتمد على التحديث اليدوي للأسعار
-}, 9000000);
-
-// ==============================================
-// 💬 أوامر نظام التداول
-// ==============================================
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
-  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-  const cmd = args.shift().toLowerCase();
-  const userId = message.author.id;
-
-  // 📊 عرض السوق
-  if (cmd === 'سوق' || cmd === 'اسعار') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    
-    let text = '📊 **أسعار السوق الحالية:**\n\n';
-    for (const [sym, asset] of Object.entries(marketAssets)) {
-      const trend = asset.change > 0 ? '📈' : asset.change < 0 ? '📉' : '➡️';
-      text += `${trend} **${sym}** — ${asset.name}\nالسعر: **${asset.price}** 💵 (${asset.change > 0 ? '+' : ''}${asset.change}%)\n\n`;
-    }
-    text += '💡 استخدم: `اشترِ الرمز الكمية` أو `بعِ الرمز الكمية`\nمثال: `اشترِ GOLD 5`';
-    message.reply(text);
-  }
-
-  // 🛒 شراء
-  if (cmd === 'اشترِ' || cmd === 'اشترى' || cmd === 'شراء') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const symbol = args[0]?.toUpperCase();
-    const amount = parseInt(args[1]);
-    
-    if (!marketAssets[symbol]) return message.reply('❌ رمز غير صالح! استخدم: GOLD, STOCK, COIN, GEM, REAL');
-    if (!amount || amount <= 0) return message.reply('❌ حدد الكمية! مثال: `اشترِ GOLD 2`');
-    
-    const totalCost = marketAssets[symbol].price * amount;
-    const u = users.get(userId);
-    const portfolio = getPortfolio(userId);
-    
-    if (u.balance < totalCost) {
-      return message.reply(`❌ رصيدك غير كافٍ!\nالمطلوب: ${totalCost} 💵\nمتاح: ${u.balance} 💵`);
-    }
-    
-    u.balance -= totalCost;
-    portfolio[symbol] += amount;
-    saveData();
-    
-    message.reply(`
-✅ **تم الشراء بنجاح!**
-📦 الكمية: ${amount} × ${marketAssets[symbol].name}
-💰 السعر الواحد: ${marketAssets[symbol].price} 💵
-💳 المجموع المخصوم: ${totalCost} 💵
-💵 رصيدك المتبقي: ${u.balance} 💵
-    `);
-  }
-
-  // 💰 بيع
-  if (cmd === 'بعِ' || cmd === 'بيع') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const symbol = args[0]?.toUpperCase();
-    const amount = parseInt(args[1]);
-    
-    if (!marketAssets[symbol]) return message.reply('❌ رمز غير صالح!');
-    if (!amount || amount <= 0) return message.reply('❌ حدد الكمية! مثال: `بعِ GOLD 2`');
-    
-    const portfolio = getPortfolio(userId);
-    if (portfolio[symbol] < amount) {
-      return message.reply(`❌ لا تمتلك كمية كافية!\nلديك: ${portfolio[symbol]} فقط`);
-    }
-    
-    const totalGain = marketAssets[symbol].price * amount;
-    const u = users.get(userId);
-    
-    portfolio[symbol] -= amount;
-    u.balance += totalGain;
-    saveData();
-    
-    message.reply(`
-✅ **تم البيع بنجاح!**
-📦 الكمية المباعة: ${amount} × ${marketAssets[symbol].name}
-💰 السعر الواحد: ${marketAssets[symbol].price} 💵
-💵 المجموع المضاف: ${totalGain} 💵
-💳 رصيدك الحالي: ${u.balance} 💵
-    `);
-  }
-
-  // 📦 محفظتي
-  if (cmd === 'محفظتي' || cmd === 'محفظة') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const portfolio = getPortfolio(userId);
-    let text = '📦 **محفظتك الاستثمارية:**\n\n';
-    let totalValue = 0, initialValue = 0;
-    let hasAssets = false;
-    
-    for (const [sym, qty] of Object.entries(portfolio)) {
-      if (sym === 'lastUpdate') continue;
-      if (qty > 0) {
-        hasAssets = true;
-        const currentPrice = marketAssets[sym].price;
-        const value = qty * currentPrice;
-        totalValue += value;
-        text += `${marketAssets[sym].name}: **${qty} وحدة**\nالقيمة الحالية: ${value} 💵 (${currentPrice} لكل وحدة)\n\n`;
-      }
-    }
-    
-    if (!hasAssets) {
-      text += '📭 محفظتك فارغة حالياً! استخدم `!سوق` لترى ما يمكنك شراؤه 📈';
+      message.reply(`🍀 حظ طيب — ربحت **${small} عملة**`);
     } else {
-      text += `💰 **إجمالي قيمة المحفظة:** ${totalValue} 💵`;
+      message.reply('😅 لم يحالفك الحظ هذه المرة — حاول مجدداً!');
     }
-    
-    message.reply(text);
   }
 
-  // 📰 خبر عشوائي
-  if (cmd === 'خبر' || cmd === 'سوق_خبر') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    triggerRandomNews(message.channel);
+  // ─── الشركات والأسهم ───
+  else if (command === 'شركات') {
+    let list = '📊 **الشركات المتاحة:**\n';
+    COMPANIES.forEach(c => {
+      list += `${c.symbol} — ${c.name} | السعر: ${c.price}\n`;
+    });
+    message.reply(list);
   }
 
-  // 🔄 تحديث الأسعار يدوياً
-  if (cmd === 'تحديث_الاسعار' || cmd === 'تحديث_السوق') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    updateMarketPrices();
-    message.reply('✅ تم تحديث أسعار السوق! اكتب `!سوق` للاطلاع عليها 📊');
-  }
-});
-// ==============================================
-// 📊 نظام الاستثمار والأصول المتغيرة
-// ==============================================
-
-// قائمة الأصول والأسعار
-const assetsData = {
-  سيارات:      { emoji: '🚗',  basePrice: 86203,   price: 86203,   trend: -1 },
-  أسهم:        { emoji: '📊',  basePrice: 37840,   price: 37840,   trend: -1 },
-  أراضي:       { emoji: '🏙️', basePrice: 127286,  price: 127286,  trend: -1 },
-  قطارات:      { emoji: '🚄',  basePrice: 2027054, price: 2027054, trend: 1  },
-  هواتف:       { emoji: '📱',  basePrice: 20000,   price: 20000,   trend: -1 },
-  شركات:       { emoji: '💻',  basePrice: 80425,   price: 80425,   trend: 0  },
-  سيرفرات:     { emoji: '📺',  basePrice: 37462,   price: 37462,   trend: -1 },
-  بوتات:       { emoji: '🤖',  basePrice: 52964,   price: 52964,   trend: -1 },
-  طائرات:      { emoji: '✈️',  basePrice: 134814,  price: 134814,  trend: -1 },
-  ملاعب:       { emoji: '🏟️', basePrice: 5421179, price: 5421179, trend: -1 },
-  ذهب:         { emoji: '🪙',  basePrice: 2500,    price: 2500,    trend: 0  },
-  فضة:         { emoji: '🥈',  basePrice: 350,     price: 350,     trend: 1  },
-  منازل:       { emoji: '🏠',  basePrice: 15000,   price: 15000,   trend: 1  },
-  مزارع:       { emoji: '🌾',  basePrice: 8500,    price: 8500,    trend: 0  },
-  محلات:       { emoji: '🏪',  basePrice: 12000,   price: 12000,   trend: 1  },
-  فنادق:       { emoji: '🏨',  basePrice: 95000,   price: 95000,   trend: 1  },
-  سفن:         { emoji: '🚢',  basePrice: 450000,  price: 450000,  trend: -1 },
-  طائرات_خاصة:{ emoji: '🛩️',  basePrice: 850000,  price: 850000,  trend: -1 },
-  بنوك:        { emoji: '🏦',  basePrice: 250000,  price: 250000,  trend: 1  },
-  مصانع:       { emoji: '🏭',  basePrice: 150000,  price: 150000,  trend: 0  },
-  متاجر_الكترونية:{ emoji: '🛒', basePrice: 45000, price: 45000, trend: 1 },
-  عقارات_فاخرة:{ emoji: '🏰',  basePrice: 500000,  price: 500000,  trend: 0  },
-  محطات_طاقة:  { emoji: '⚡',  basePrice: 350000,  price: 350000,  trend: 1  },
-  مستشفيات:   { emoji: '🏥',  basePrice: 400000,  price: 400000,  trend: 0  }
-};
-
-// تحديث الأسعار كل ساعة
-function updateAssetPrices() {
-  for (const [name, asset] of Object.entries(assetsData)) {
-    const changePercent = (Math.random() - 0.5) * 0.06; // ±3%
-    asset.price = Math.round(asset.price * (1 + changePercent));
-    asset.price = Math.max(asset.basePrice * 0.5, Math.min(asset.basePrice * 2, asset.price));
-    asset.trend = changePercent > 0.005 ? 1 : changePercent < -0.005 ? -1 : 0;
-  }
-  console.log('📊 تم تحديث أسعار الأصول');
-}
-
-setInterval(updateAssetPrices, 3600000);
-
-// الحصول على محفظة اللاعب
-function getAssetsPortfolio(userId) {
-  const u = users.get(userId);
-  if (!u.assetsPortfolio) u.assetsPortfolio = {};
-  return u.assetsPortfolio;
-}
-
-// ==============================================
-// 💬 أوامر نظام الاستثمار
-// ==============================================
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
-  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-  const cmd = args.shift().normalize();
-  const userId = message.author.id;
-
-  // 📊 عرض الأسعار
-  if (cmd === 'الاسعار' || cmd === 'اسعار') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
+  else if (command === 'شراء' && args[0]?.toLowerCase() === 'سهم') {
+    const symbol = args[1]?.toUpperCase();
+    const qty = parseInt(args[2]);
+    const comp = COMPANIES.find(c => c.symbol === symbol);
+    if (!comp) return message.reply('❌ رمز شركة غير صالح! استخدم `.شركات`');
+    if (!qty || qty < 1) return message.reply('❌ حدد الكمية! مثال: `.شراء سهم GOLD 5`');
     
-    let text = '📊 **أسعار السوق الحالية:**\n\n';
-    for (const [name, asset] of Object.entries(assetsData)) {
-      const arrow = asset.trend === 1 ? '📈' : asset.trend === -1 ? '📉' : '➡️';
-      text += `${arrow} ${asset.emoji} ${name}: **${asset.price.toLocaleString()}** $\n`;
-    }
-    text += '\n💡 اشترِ عندما ينخفض السعر، وبِع عندما يرتفع!\nالأوامر: `اشترِ اسم الكمية` — `بيع اسم الكمية`';
-    message.reply(text);
-  }
-
-  // 🛒 شراء
-  if (cmd === 'اشترِ' || cmd === 'اشترى' || cmd === 'شراء') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const assetName = args[0];
-    const quantity = parseInt(args[1]);
+    const total = comp.price * qty;
+    if (user.money < total) return message.reply(`❌ تحتاج إلى ${total.toLocaleString()} عملة لهذه الصفقة`);
     
-    if (!assetsData[assetName]) {
-      return message.reply('❌ اسم غير صالح! اكتب `!الاسعار` لترى القائمة');
-    }
-    if (!quantity || quantity <= 0) {
-      return message.reply('❌ حدد الكمية! مثال: `اشترِ ذهب 2`');
-    }
-    
-    const totalCost = assetsData[assetName].price * quantity;
-    const u = users.get(userId);
-    const portfolio = getAssetsPortfolio(userId);
-    
-    if (u.balance < totalCost) {
-      return message.reply(`❌ رصيدك غير كافٍ!\nالمطلوب: ${totalCost.toLocaleString()} $\nمتاح: ${u.balance.toLocaleString()} $`);
-    }
-    
-    u.balance -= totalCost;
-    portfolio[assetName] = (portfolio[assetName] || 0) + quantity;
+    user.money -= total;
+    if (!user.stocks[symbol]) user.stocks[symbol] = 0;
+    user.stocks[symbol] += qty;
     saveData();
-    
-    message.reply(`
-✅ **تم الشراء بنجاح!**
-${assetsData[assetName].emoji} ${assetName}
-📦 الكمية: ${quantity} وحدة
-💰 السعر الواحد: ${assetsData[assetName].price.toLocaleString()} $
-💳 المجموع: ${totalCost.toLocaleString()} $
-💵 رصيدك المتبقي: ${u.balance.toLocaleString()} $
-    `);
+    message.reply(`✅ اشتريت **${qty} سهم** من ${comp.name} بـ ${total.toLocaleString()} عملة`);
   }
 
-  // 💰 بيع
-  if (cmd === 'بيع' || cmd === 'بِع') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const assetName = args[0];
-    const quantity = parseInt(args[1]);
+  else if (command === 'بيع' && args[0]?.toLowerCase() === 'سهم') {
+    const symbol = args[1]?.toUpperCase();
+    const qty = parseInt(args[2]);
+    const comp = COMPANIES.find(c => c.symbol === symbol);
+    if (!comp) return message.reply('❌ رمز شركة غير صالح!');
+    if (!user.stocks[symbol] || user.stocks[symbol] < qty) return message.reply('❌ لا تمتلك هذا الكمية من الأسهم');
     
-    if (!assetsData[assetName]) {
-      return message.reply('❌ اسم غير صالح! اكتب `!الاسعار` لترى القائمة');
-    }
-    if (!quantity || quantity <= 0) {
-      return message.reply('❌ حدد الكمية! مثال: `بيع ذهب 1`');
-    }
-    
-    const portfolio = getAssetsPortfolio(userId);
-    if (!portfolio[assetName] || portfolio[assetName] < quantity) {
-      return message.reply(`❌ لا تمتلك كمية كافية!\nلديك: ${portfolio[assetName] || 0} فقط`);
-    }
-    
-    const totalEarn = assetsData[assetName].price * quantity;
-    const u = users.get(userId);
-    
-    portfolio[assetName] -= quantity;
-    if (portfolio[assetName] === 0) delete portfolio[assetName];
-    u.balance += totalEarn;
+    const total = comp.price * qty;
+    user.money += total;
+    user.stocks[symbol] -= qty;
+    if (user.stocks[symbol] <= 0) delete user.stocks[symbol];
     saveData();
-    
-    message.reply(`
-✅ **تم البيع بنجاح!**
-${assetsData[assetName].emoji} ${assetName}
-📦 الكمية المباعة: ${quantity} وحدة
-💰 السعر الحالي: ${assetsData[assetName].price.toLocaleString()} $
-💵 المجموع المضاف: ${totalEarn.toLocaleString()} $
-💳 رصيدك الحالي: ${u.balance.toLocaleString()} $
-    `);
+    message.reply(`✅ بعت **${qty} سهم** من ${comp.name} بـ ${total.toLocaleString()} عملة`);
   }
 
-  // 📦 ممتلكاتي
-  if (cmd === 'ممتلكاتي' || cmd === 'ممتلكات' || cmd === 'محفظتي') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const portfolio = getAssetsPortfolio(userId);
-    let text = '📦 **ممتلكاتك الحالية:**\n\n';
-    let totalValue = 0;
-    let hasItems = false;
-    
-    for (const [name, qty] of Object.entries(portfolio)) {
-      if (qty > 0) {
-        hasItems = true;
-        const value = assetsData[name].price * qty;
-        totalValue += value;
-        text += `${assetsData[name].emoji} ${name}: **${qty} وحدة** — القيمة: ${value.toLocaleString()} $\n`;
-      }
-    }
-    
-    if (!hasItems) {
-      text += '📭 لا تمتلك أي أصول حتى الآن! اكتب `!الاسعار` لتبدأ الاستثمار 📈';
-    } else {
-      text += `\n💰 **إجمالي القيمة:** ${totalValue.toLocaleString()} $`;
-    }
-    
-    message.reply(text);
+  else if (command === 'محفظتي') {
+    const items = Object.entries(user.stocks);
+    if (items.length === 0) return message.reply('📈 محفظتك فارغة حالياً');
+    let list = '📈 **محفظتك الاستثمارية:**\n';
+    items.forEach(([sym, qty]) => {
+      const c = COMPANIES.find(x => x.symbol === sym);
+      list += `${sym} — ${c?.name || sym}: ${qty} سهم | القيمة: ${(c?.price || 0) * qty}\n`;
+    });
+    message.reply(list);
   }
-});
-// ==============================================
-// 🎩 نظام المزادات السرية والقطع النادرة
-// ==============================================
 
-let activeAuction = null;
-
-// أنواع القطع النادرة
-const treasureItems = {
-  عادية: [
-    { name: 'صندوق عملات قديمة', emoji: '🪙', value: 800, desc: 'صندوق خشبي مليء بالعملات المعدنية' },
-    { name: 'ساعة حائط قديمة', emoji: '🕰️', value: 1200, desc: 'ساعة قديمة لا تزال تعمل بدقة مذهلة' },
-    { name: 'قطعة أرض صغيرة', emoji: '🌱', value: 1500, desc: 'قطعة أرض في منطقة هادئة' },
-    { name: 'مجموعة كتب نادرة', emoji: '📚', value: 950, desc: 'كتب قديمة قيمتها في ازدياد' },
-    { name: 'حيوان أليف نادر', emoji: '🐾', value: 1100, desc: 'حيوان مميز يزين ممتلكاتك' }
-  ],
-  مميزة: [
-    { name: 'لوحة فنية أصلية', emoji: '🖼️', value: 5000, desc: 'لوحة لفنان مشهور، قيمتها ترتفع بمرور الوقت' },
-    { name: 'أسهم في شركة واعدة', emoji: '📈', value: 6500, desc: 'حصة في شركة ناشئة تنمو بسرعة' },
-    { name: 'مزرعة مثمرة', emoji: '🌾', value: 7200, desc: 'مزرعة تدر دخلاً منتظماً كل أسبوع' },
-    { name: 'مجوهرات عائلية', emoji: '💎', value: 5800, desc: 'عقد ثمين مرّ عبر أجيال' },
-    { name: 'متجر صغير في وسط المدينة', emoji: '🏪', value: 8000, desc: 'محل تجاري صغير يدر ربحاً مستقراً' }
-  ],
-  نادرة: [
-    { name: 'سيارة كلاسيكية فاخرة', emoji: '🚗', value: 25000, desc: 'سيارة قديمة بحالة ممتازة، قطعة نادرة' },
-    { name: 'منزل في منطقة راقية', emoji: '🏡', value: 35000, desc: 'منزل واسع في أرقى أحياء المدينة' },
-    { name: 'سندات ذهب ثمينة', emoji: '📜', value: 28000, desc: 'وثائق ملكية لسبائك ذهب حقيقية' },
-    { name: 'مطعم ناجح', emoji: '🍽️', value: 32000, desc: 'مطعم شهير له سمعة طيبة' },
-    { name: 'مخبأ سري في الجبال', emoji: '⛰️', value: 22000, desc: 'مكان سري قد يخفي مفاجآت مستقبلية' }
-  ],
-  اسطورية: [
-    { name: 'قصر على شاطئ البحر', emoji: '🏖️🏰', value: 150000, desc: 'قصر تاريخي بمساحات شاسعة وإطلالة بحرية لا تُقارن' },
-    { name: 'شركة تجارية كاملة', emoji: '🏢', value: 200000, desc: 'مؤسسة تجارية قائمة بأصولها وموظفيها' },
-    { name: 'طائرة خاصة', emoji: '✈️', value: 180000, desc: 'طائرة خاصة مجهزة بالكامل للسفر أينما شئت' },
-    { name: 'كنز مدفون من العصور القديمة', emoji: '🗺️💰', value: 250000, desc: 'مخبأ مليء بالتحف والذهب لم يره أحد منذ قرون!' },
-    { name: 'جزيرة خاصة بك', emoji: '🏝️', value: 300000, desc: 'جزيرة استوائية خاصة، ملكك بالكامل!' }
-  ]
-};
-
-// أوصاف غامضة للمزاد
-const mysteryDescriptions = [
-  'شيء ثقيل ومغلف بقطعة قماش قديمة... ✨',
-  'صندوق خشبي قديم ومغلق بإحكام... 📦',
-  'حقيبة جلدية تبدو ثمينة... 💼',
-  'لفافة ورقية تبدو قديمة جداً... 📜',
-  'مغلف لامع يلمع في الظلام... ✨',
-  'شيء مخبأ داخل صندوق حديدي صدئ... 🔒',
-  'حقيبة صغيرة تنبعث منها رائحة العطر القديم... 👜',
-  'غلاف ورقي سميك يحمل ختماً غامضاً... ⚜️'
-];
-
-// اختيار قطعة عشوائية
-function getRandomTreasure() {
-  const roll = Math.random();
-  let category, items;
-  
-  if (roll < 0.05) {
-    category = 'اسطورية';
-    items = treasureItems.اسطورية;
-  } else if (roll < 0.25) {
-    category = 'نادرة';
-    items = treasureItems.نادرة;
-  } else if (roll < 0.60) {
-    category = 'مميزة';
-    items = treasureItems.مميزة;
-  } else {
-    category = 'عادية';
-    items = treasureItems.عادية;
-  }
-  
-  const item = items[Math.floor(Math.random() * items.length)];
-  return { ...item, category };
-}
-
-// ==============================================
-// 💬 أوامر المزادات السرية
-// ==============================================
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
-  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-  const cmd = args.shift().toLowerCase();
-  const userId = message.author.id;
-
-  // 🎩 بدء مزاد جديد
-  if (cmd === 'مزاد_جديد' || cmd === 'مزاد_ابدأ') {
-    // تحقق من صلاحيات المدير
+  // ─── المزادات ───
+  else if (command === 'بدء' && args[0]?.toLowerCase() === 'مزاد') {
     if (!message.member.permissions.has('Administrator')) {
-      return message.reply('❌ فقط المسؤولون يمكنهم بدء مزادات!');
+      return message.reply('⚠️ فقط المشرفون يمكنهم بدء مزاد');
     }
-    if (activeAuction) {
-      return message.reply('⚠️ يوجد مزاد جاري بالفعل! أنهِه أولاً بـ `!انهِ_المزاد`');
-    }
+    if (auctionData.active) return message.reply('⚠️ يوجد مزاد جارٍ بالفعل! أنهِه أولاً');
     
-    const treasure = getRandomTreasure();
-    const startingPrice = Math.round(treasure.value * 0.4);
-    const minIncrement = Math.round(startingPrice * 0.1);
-    
-    activeAuction = {
-      item: treasure,
-      mysteryText: mysteryDescriptions[Math.floor(Math.random() * mysteryDescriptions.length)],
-      highestBid: 0,
+    auctionData = {
+      active: true,
+      itemName: 'قطعة نادرة مجهولة',
+      itemDesc: 'سيتم الكشف عنها عند انتهاء المزاد',
+      highestBid: 1000,
       highestBidder: null,
-      startingPrice,
-      minIncrement,
-      bids: [],
-      startTime: Date.now(),
-      channelId: message.channel.id
+      endTime: Date.now() + 600000,
+      bids: []
     };
-    
-    message.reply(`
-🎩 **مزاد سري جديد مفتوح!** ✨
-
-في مكان ما هنا يوجد:
-> ${activeAuction.mysteryText}
-
-❓ **مجهول تماماً!** هل هو كنز ثمين أم مجرد تحفة عادية؟
-ابدأ المزايدة من: **${startingPrice.toLocaleString()}** 💵
-الحد الأدنى للزيادة: **${minIncrement.toLocaleString()}** 💵
-
-اكتب: \`!زايد المبلغ\` للمشاركة 💰
-    `);
+    message.reply('🔒 **تم بدء مزاد سري جديد!**\nالقطعة: مجهولة حتى النهاية\nسعر البدء: 1,000 عملة\nالمدة: 10 دقائق\nاستخدم `.اعرض المبلغ` للمزايدة');
   }
 
-  // 💰 المزايدة
-  if (cmd === 'زايد' || cmd === 'مزايدة') {
-    if (!activeAuction) {
-      return message.reply('❌ لا يوجد مزاد جاري حالياً! انتظر حتى يبدأ مزاد جديد 🎩');
-    }
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً لإنشاء حسابك!');
-    
+  else if (command === 'مزاد') {
+    if (!auctionData.active) return message.reply('❌ لا يوجد مزاد جارٍ حالياً');
+    const remaining = Math.max(0, Math.ceil((auctionData.endTime - Date.now()) / 60000));
+    message.reply(`🔒 **مزاد سري جارٍ...**\nالقطعة: مجهولة 🔒\nأعلى عرض: **${auctionData.highestBid.toLocaleString()}** عملة\nالمزايد: ${auctionData.highestBidder ? `<@${auctionData.highestBidder}>` : 'لا أحد بعد'}\nالمتبقي: ${remaining} دقيقة\n\nاستخدم: `.اعرض 2000` للمزايدة`);
+  }
+
+  else if (command === 'اعرض') {
+    if (!auctionData.active) return message.reply('❌ لا يوجد مزاد جارٍ حالياً');
     const amount = parseInt(args[0]);
-    const u = users.get(userId);
+    if (!amount || amount <= auctionData.highestBid) {
+      return message.reply(`❌ يجب أن يكون عرضك أعلى من **${auctionData.highestBid.toLocaleString()}**`);
+    }
+    if (user.money < amount) return message.reply('❌ رصيدك غير كافٍ لهذا العرض!');
     
-    if (!amount || amount <= 0) {
-      return message.reply('❌ حدد المبلغ! مثال: `!زايد 5000`');
-    }
-    if (u.balance < amount) {
-      return message.reply(`❌ رصيدك غير كافٍ!\nمحاولة: ${amount.toLocaleString()} 💵\nمتاح: ${u.balance.toLocaleString()} 💵`);
-    }
-    if (amount < activeAuction.startingPrice) {
-      return message.reply(`❌ المبلغ أقل من السعر الابتدائي!\nالحد الأدنى للبداية: ${activeAuction.startingPrice.toLocaleString()} 💵`);
-    }
-    if (amount <= activeAuction.highestBid) {
-      return message.reply(`❌ يجب أن يكون مبلغك أعلى من أعلى مزايدة حالياً!\nأعلى مزايدة: ${activeAuction.highestBid.toLocaleString()} 💵`);
-    }
-    if (activeAuction.highestBid > 0 && amount - activeAuction.highestBid < activeAuction.minIncrement) {
-      return message.reply(`❌ يجب أن تزيد بمقدار لا يقل عن ${activeAuction.minIncrement.toLocaleString()} 💵`);
-    }
-    
-    activeAuction.highestBid = amount;
-    activeAuction.highestBidder = { id: userId, name: message.author.username };
-    activeAuction.bids.push({ userId, name: message.author.username, amount, time: Date.now() });
-    
-    message.reply(`
-🔔 **مزايدة جديدة!**
-🏆 أعلى سعر الآن: **${amount.toLocaleString()}** 💵
-👤 المزايد: **${message.author.username}**
-
-من يزايد بأكثر؟ اكتب \`!زايد المبلغ\` 💪
-    `);
+    auctionData.highestBid = amount;
+    auctionData.highestBidder = userId;
+    auctionData.bids.push({ user: userId, amount, time: new Date().toLocaleTimeString() });
+    message.reply(`✅ تم تسجيل عرضك: **${amount.toLocaleString()}** عملة 🎉`);
   }
 
-  // 🔍 عرض حالة المزاد الحالي
-  if (cmd === 'مزاد_حالي' || cmd === 'حالة_المزاد') {
-    if (!activeAuction) {
-      return message.reply('❌ لا يوجد مزاد جاري حالياً 🎩');
-    }
-    
-    if (activeAuction.highestBid === 0) {
-      message.reply(`
-🎩 **المزاد جاري الآن...**
-❓ ${activeAuction.mysteryText}
-💰 لم يبدأ أحد بالمزايدة بعد! كن الأول 🏃
-اكتب \`!زايد ${activeAuction.startingPrice}\` لتبدأ المزايدة!
-      `);
-    } else {
-      message.reply(`
-🎩 **المزاد مستمر...**
-❓ ${activeAuction.mysteryText}
-🏆 أعلى مزايدة: **${activeAuction.highestBid.toLocaleString()}** 💵
-👤 من: **${activeAuction.highestBidder.name}**
-⏳ المزايدات: ${activeAuction.bids.length}
-      `);
-    }
-  }
-
-  // 🎇 إنهاء المزاد وكشف السلعة
-  if (cmd === 'انهِ_المزاد' || cmd === 'إنهاء_المزاد') {
+  else if (command === 'انهاء' && args[0]?.toLowerCase() === 'مزاد') {
     if (!message.member.permissions.has('Administrator')) {
-      return message.reply('❌ فقط المسؤولون يمكنهم إنهاء المزاد!');
+      return message.reply('⚠️ فقط المشرفون يمكنهم إنهاء المزاد');
     }
-    if (!activeAuction) {
-      return message.reply('❌ لا يوجد مزاد جاري لإنهاؤه!');
+    if (!auctionData.active) return message.reply('❌ لا يوجد مزاد جارٍ');
+    
+    if (auctionData.highestBidder) {
+      const winner = getUser(auctionData.highestBidder);
+      winner.rareItems.push({
+        name: 'قطعة أسطورية من المزاد',
+        wonFor: auctionData.highestBid,
+        date: new Date().toLocaleDateString()
+      });
+      saveData();
+      message.channel.send(`🎉 **المزاد انتهى!**\n🏆 الفائز: <@${auctionData.highestBidder}>\n💰 بمبلغ: ${auctionData.highestBid.toLocaleString()} عملة\n🎁 تمت إضافة القطعة إلى مجموعته!`);
+    } else {
+      message.channel.send('❌ انتهى المزاد ولم يشارك أحد');
     }
-    
-    if (activeAuction.highestBid === 0) {
-      message.reply(`
-😔 **انتهى المزاد...**
-لم يتقدم أحد بمزايدة! القطعة تعود لمكانها مجهولة مرة أخرى ⛰️
-      `);
-      activeAuction = null;
-      return;
-    }
-    
-    // خصم المبلغ من الفائز وإضافة القطعة لممتلكاته
-    const winnerId = activeAuction.highestBidder.id;
-    const winnerName = activeAuction.highestBidder.name;
-    const bidAmount = activeAuction.highestBid;
-    const item = activeAuction.item;
-    
-    const u = users.get(winnerId);
-    u.balance -= bidAmount;
-    
-    // إضافة القطعة لممتلكات الفائز
-    if (!u.treasures) u.treasures = [];
-    u.treasures.push({
-      name: item.name,
-      emoji: item.emoji,
-      value: bidAmount,
-      wonAt: Date.now()
+    auctionData.active = false;
+  }
+
+  else if (command === 'مجموعتي') {
+    if (user.rareItems.length === 0) return message.reply('📦 لم تفز بأي قطعة نادرة حتى الآن! شارك في المزادات');
+    let list = '🏅 **مجموعتك النادرة:**\n';
+    user.rareItems.forEach((item, i) => {
+      list += `${i+1}. ${item.name} — فزت بها بـ ${item.wonFor} 💰\n`;
     });
-    saveData();
-    
-    // تحديد لون الفئة
-    const categoryColors = {
-      عادية: '🟢 عادية',
-      مميزة: '🟡 مميزة',
-      نادرة: '🟠 نادرة',
-      اسطورية: '🔴 أسطورية ✨👑'
-    };
-    
-    message.channel.send(`
-${item.category === 'اسطورية' ? '🎉🎊🎊🎉' : '🎇🎆🎇'}
-**✨ كشف الستار عن القطعة المجهولة! ✨**
+    message.reply(list);
+  }
 
-📦 كانت العبوة تخفي:
-${item.emoji} **${item.name}**
-📂 الفئة: ${categoryColors[item.category]}
-📝 الوصف: ${item.desc}
-💰 قيمتها الحقيقية: **${item.value.toLocaleString()}** 💵
+  // ─── عرض الأوامر ───
+  else if (command === 'اوامر') {
+    message.reply(`
+📋 **جميع الأوامر المتاحة:**
 
-🏆 **الفائز:** ${message.author.toString() === winnerName ? winnerName : `<@${winnerId}>`}
-💰 المبلغ المدفوع: **${bidAmount.toLocaleString()}** 💵
+🏦 الحساب:
+.حساب — عرض رصيدك
+.يومي — مكافأة يومية
+.ترتيب — قائمة الأغنى
+.اوامر — هذه القائمة
 
-${bidAmount < item.value ? `🎉 ربحك الفوري: **+${(item.value - bidAmount).toLocaleString()}** 💵` : item.category === 'اسطورية' ? '👑 قطعة أسطورية لا تُقدر بثمن!' : 'قيمة جيدة لقطعة نادرة!'}
+🏠 السوق:
+.سوق — العقارات المتاحة
+.اشترِ الرقم — شراء عقار
+.ممتلكاتي — ما تملكه
+.بع الرقم — بيع عقار
 
-مبروك للفائز! 🥳🎊
+🎮 الألعاب:
+.روليت المبلغ — مراهنة
+.صناديق — ابحث عن ذهب
+.حظ — حظك اليوم
+
+📊 الأسهم:
+.شركات — قائمة الشركات
+.شراء سهم الرمز الكمية
+.بيع سهم الرمز الكمية
+.محفظتي — أسهمك
+
+🔨 المزادات:
+.بدء مزاد — ⚠️ بدء مزاد جديد
+.مزاد — حالة المزاد
+.اعرض المبلغ — مزايدة
+.انهاء مزاد — ⚠️ إنهاء المزاد
+.mجموعتي — قطعك النادرة
     `);
-    
-    activeAuction = null;
-  }
-
-  // 📜 عرض كنوزك التي فزت بها
-  if (cmd === 'كنوزي' || cmd === 'مقتنياتي') {
-    if (!users.has(userId)) return message.reply('⚠️ اكتب `!بداية` أولاً!');
-    const u = users.get(userId);
-    
-    if (!u.treasures || u.treasures.length === 0) {
-      return message.reply('📭 لم تفز بأي قطعة من المزادات حتى الآن! شارك في مزاد قادم 🎩✨');
-    }
-    
-    let text = '🏆 **مقتنياتك النادرة من المزادات:**\n\n';
-    u.treasures.forEach((t, i) => {
-      text += `${i + 1}. ${t.emoji} **${t.name}**\n💰 قيمتها: ${t.value.toLocaleString()} 💵\n\n`;
-    });
-    text += `📊 المجموع: ${u.treasures.length} قطعة نادرة`;
-    
-    message.reply(text);
   }
 });
 
-
-// ==============================================
-// 🌍 خادم Render — لا تحذف هذا
-// ==============================================
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  res.send('✅ بوت إمبراطورية الثروة يعمل بنجاح!');
-});
-
-app.listen(PORT, () => {
-  console.log(`🌍 الخادم يعمل على المنفذ ${PORT}`);
-});
-
-// ==============================================
-// 📅 توزيع أرباح العقارات يومياً
-// ==============================================
-setInterval(() => {
-  let totalPaid = 0;
-  for (const [id, u] of users) {
-    let income = 0;
-    u.investments.forEach(inv => {
-      if (inv.income) income += inv.income;
-    });
-    if (income > 0) {
-      u.balance += income;
-      totalPaid += income;
-    }
-  }
-  if (totalPaid > 0) {
-    saveData();
-    console.log(`💰 تم توزيع أرباح العقارات: ${totalPaid} 💵`);
-  }
-}, 86400000);
-
-console.log('✅ البوت جاهز ويعمل بنجاح!');
+// ─── تسجيل الدخول ───
+client.login(TOKEN);
