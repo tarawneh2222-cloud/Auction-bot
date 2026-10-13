@@ -58,21 +58,20 @@ client.on('messageCreate', async message => {
   const command = args.shift();
   const user = getUser(message.author.id);
 
-  if (command === '.حساب') {
+  if (command === '!حساب') {
     message.reply(`💰 **حسابك:** ${user.money} دولار\n🏠 العقارات: ${user.properties.length}`);
   }
   
-  else if (command === '.مساعدة') {
+  else if (command === '!مساعدة') {
     message.reply(`
 **📋 قائمة الأوامر:**
-.حساب - عرض رصيدك
-.مساعدة - عرض هذه القائمة
-.تعويض @الشخص المبلغ - إضافة مبلغ لشخص (للمدراء فقط)
+!حساب - عرض رصيدك
+!مساعدة - عرض هذه القائمة
+!تعويض @الشخص المبلغ - إضافة مبلغ لشخص (للمدراء فقط)
     `);
   }
 
-  // ✅ أمر التعويض
-  else if (command === '.تعويض') {
+  else if (command === '!تعويض') {
     if (!message.member.permissions.has('Administrator')) {
       return message.reply('❌ ليس لديك صلاحية لاستخدام هذا الأمر!');
     }
@@ -81,10 +80,10 @@ client.on('messageCreate', async message => {
     const amount = parseInt(args[1]);
     
     if (!target) {
-      return message.reply('❌ الرجاء تحديد الشخص! مثال: .تعويض @الاسم 5000');
+      return message.reply('❌ الرجاء تحديد الشخص! مثال: !تعويض @الاسم 50000');
     }
     if (!amount || amount <= 0) {
-      return message.reply('❌ الرجاء كتابة المبلغ بشكل صحيح! مثال: .تعويض @الاسم 5000');
+      return message.reply('❌ الرجاء كتابة المبلغ بشكل صحيح! مثال: !تعويض @الاسم 50000');
     }
     
     const targetUser = getUser(target.id);
