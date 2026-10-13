@@ -1,6 +1,6 @@
-'use strict';
 
-require('dotenv').config();
+
+
 
 const express = require('express');
 const fs = require('node:fs');
@@ -382,3 +382,11 @@ const commands = [
     )
     .addSubcommand(s =>
       s.setName('شراء')
+const BOT_TOKEN = "MTU1ODg3MzkwNTgxNTQ4NjYxNQ.GGuvqo.0wJ31XLdu5GEVyaVoDhC9B0mMj1dmdBBhMaWg8";
+
+if (!BOT_TOKEN || BOT_TOKEN === "ضع_توكن_بوتك_هنا") {
+  console.error('❌ لم تقم بوضع التوكن بعد!');
+  process.exit(1);
+}
+
+client.login(BOT_TOKEN);
