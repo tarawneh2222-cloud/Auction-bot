@@ -379,11 +379,11 @@ new SlashCommandBuilder()
     s.setName('سوق')
     .setDescription('أسعار السوق')
   )
-  .addSubcommand(s =>
-    s.setName('شراء')
-    .setDescription('شراء أصل من السوق')
-  ),
-]
+.addSubcommand(s =>
+  s.setName('شراء')
+  .setDescription('شراء أصل من السوق')
+)
+],
 );
 
 console.log('🔍 جاري فحص المتغيرات...');
