@@ -372,17 +372,20 @@ const commands = [
   new SlashCommandBuilder()
     .setName('راتب')
     .setDescription('استلام راتبك'),
+new SlashCommandBuilder()
+  .setName('استثمار')
+  .setDescription('التداول الافتراضي')
+  .addSubcommand(s =>
+    s.setName('سوق')
+    .setDescription('أسعار السوق')
+  )
+  .addSubcommand(s =>
+    s.setName('شراء')
+    .setDescription('شراء أصل من السوق')
+  ),
+]
+);
 
-  new SlashCommandBuilder()
-    .setName('استثمار')
-    .setDescription('التداول الافتراضي')
-    .addSubcommand(s =>
-      s.setName('سوق')
-        .setDescription('أسعار السوق')
-    )
-    .addSubcommand(s =>
-      s.setName('شراء')
-if (!process.env.DISCORD_TOKEN) {
 console.log('🔍 جاري فحص المتغيرات...');
 
 if (!process.env.DISCORD_TOKEN) {
@@ -399,3 +402,5 @@ client.login(process.env.DISCORD_TOKEN)
     console.error('❌ خطأ في تسجيل الدخول:', err.message);
     process.exit(1);
   });
+
+  
