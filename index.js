@@ -1,10 +1,38 @@
 'use strict';
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (_req, res) => res.send('✅ البوت يعمل بكامل طاقته!'));
+// إعداد مسار ملف البيانات
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+// دالة قراءة البيانات من الملف
+function readData() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return {};
+    const raw = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('❌ خطأ في قراءة البيانات:', e);
+    return {};
+  }
+}
+
+// دالة حفظ البيانات في الملف
+function saveData(data) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    return true;
+  } catch (e) {
+    console.error('❌ خطأ في حفظ البيانات:', e);
+    return false;
+  }
+}
+
+app.get('/', (_req, res) => res.send('✅ البوت يعمل — نظام حفظ البيانات مفعّل!'));
 app.listen(PORT, () => console.log(`🌐 الخادم يعمل على المنفذ ${PORT}`));
 
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
@@ -17,19 +45,21 @@ const client = new Client({
   ]
 });
 
-// بيانات المستخدمين
-const userData = new Map();
+// تحميل البيانات عند تشغيل البوت
+let storedData = readData();
+
 function getUser(id) {
-  if (!userData.has(id)) {
-    userData.set(id, {
+  if (!storedData[id]) {
+    storedData[id] = {
       balance: 1000,
       bank: 0,
       investments: {},
       lastDaily: 0,
       lastDailyBox: 0
-    });
+    };
+    saveData(storedData);
   }
-  return userData.get(id);
+  return storedData[id];
 }
 
 // بيانات السوق والأسهم
@@ -53,10 +83,17 @@ setInterval(() => {
   }
 }, 3600000);
 
+// حفظ البيانات كل دقيقة احتياطياً
+setInterval(() => {
+  saveData(storedData);
+  console.log('💾 تم حفظ البيانات تلقائياً');
+}, 60000);
+
 // معالجة الأوامر
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
-  const user = getUser(interaction.user.id);
+  const userId = interaction.user.id;
+  const user = getUser(userId);
   const { commandName, options } = interaction;
 
   // ========== 📊 الأوامر الرئيسية ==========
@@ -67,7 +104,7 @@ client.on('interactionCreate', async interaction => {
       `💰 **معلومات حسابك**\n` +
       `💵 الرصيد: **${user.balance} ريال**\n` +
       `🏦 في البنك: **${user.bank} ريال**\n` +
-      `📈 استثماراتك: **${invCount} نوع`
+      `📈 استثماراتك: **${invCount} نوع**`
     );
   }
 
@@ -78,6 +115,7 @@ client.on('interactionCreate', async interaction => {
     }
     user.lastDaily = now;
     user.balance += 200;
+    saveData(storedData);
     await interaction.reply('✅ استلمت راتبك: **200 ريال** 💵');
   }
 
@@ -86,6 +124,7 @@ client.on('interactionCreate', async interaction => {
     if (amount <= 0 || amount > user.balance) return await interaction.reply('❌ مبلغ غير صالح!');
     user.balance -= amount;
     user.bank += amount;
+    saveData(storedData);
     await interaction.reply(`✅ أودعت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
   }
 
@@ -94,6 +133,7 @@ client.on('interactionCreate', async interaction => {
     if (amount <= 0 || amount > user.bank) return await interaction.reply('❌ مبلغ غير صالح!');
     user.bank -= amount;
     user.balance += amount;
+    saveData(storedData);
     await interaction.reply(`✅ سحبت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
   }
 
@@ -103,8 +143,16 @@ client.on('interactionCreate', async interaction => {
     }
     const targetId = options.getString('المعرف');
     const amount = options.getInteger('المبلغ');
-    const targetUser = getUser(targetId);
+    const targetUser = storedData[targetId] || {
+      balance: 1000,
+      bank: 0,
+      investments: {},
+      lastDaily: 0,
+      lastDailyBox: 0
+    };
     targetUser.balance += amount;
+    storedData[targetId] = targetUser;
+    saveData(storedData);
     await interaction.reply(`✅ تم تعويض المستخدم بـ **${amount} ريال**`);
   }
 
@@ -132,6 +180,7 @@ client.on('interactionCreate', async interaction => {
     if (!user.investments[symbol]) user.investments[symbol] = { quantity: 0, invested: 0 };
     user.investments[symbol].quantity += qty;
     user.investments[symbol].invested += total;
+    saveData(storedData);
     
     await interaction.reply(
       `✅ تم الشراء:\n` +
@@ -154,6 +203,7 @@ client.on('interactionCreate', async interaction => {
     user.balance += sellPrice;
     user.investments[symbol].quantity -= qty;
     if (user.investments[symbol].quantity === 0) delete user.investments[symbol];
+    saveData(storedData);
     
     const profitText = profit >= 0 ? `✅ ربح: +${profit} ريال` : `❌ خسارة: ${profit} ريال`;
     await interaction.reply(
@@ -199,6 +249,7 @@ client.on('interactionCreate', async interaction => {
     } else {
       await interaction.reply(`🎯 الرقم كان: **${lucky}**\n❌ خسرت **${bet} ريال** رصيدك: ${user.balance}`);
     }
+    saveData(storedData);
   }
 
   else if (commandName === 'عملة') {
@@ -214,6 +265,7 @@ client.on('interactionCreate', async interaction => {
     } else {
       await interaction.reply(`${emoji} النتيجة: **${result}**\n❌ خسرت! رصيدك: **${user.balance} ريال**`);
     }
+    saveData(storedData);
   }
 
   else if (commandName === 'نرد') {
@@ -236,6 +288,7 @@ client.on('interactionCreate', async interaction => {
     } else {
       await interaction.reply(`🎲 النرد: **${d1}** + **${d2}** = **${sum}**\n❌ خسرت **${bet} ريال** رصيدك: ${user.balance}`);
     }
+    saveData(storedData);
   }
 
   else if (commandName === 'ورق') {
@@ -257,6 +310,7 @@ client.on('interactionCreate', async interaction => {
       resultText = `🃏 نتيجتك: **${player}** | الكازينو: **${dealer}** ❌ خسرت`;
     }
     await interaction.reply(`${resultText}\n💰 رصيدك: **${user.balance} ريال**`);
+    saveData(storedData);
   }
 
   else if (commandName === 'صندوق_يومي') {
@@ -268,6 +322,7 @@ client.on('interactionCreate', async interaction => {
     const amount = rewards[Math.floor(Math.random() * rewards.length)];
     user.balance += amount;
     user.lastDailyBox = now;
+    saveData(storedData);
     await interaction.reply(`📦 وجدت: **${amount} ريال**! 🎉`);
   }
 });
@@ -275,7 +330,6 @@ client.on('interactionCreate', async interaction => {
 // ========== 📋 تسجيل جميع الأوامر ==========
 
 const commands = [
-  // الأوامر الرئيسية
   new SlashCommandBuilder().setName('حسابي').setDescription('عرض رصيدك ومعلومات حسابك'),
   new SlashCommandBuilder().setName('راتب').setDescription('استلام راتب يومي'),
   new SlashCommandBuilder()
@@ -293,8 +347,6 @@ const commands = [
     .addStringOption(o => o.setName('المعرف').setDescription('معرف المستخدم').setRequired(true))
     .addIntegerOption(o => o.setName('المبلغ').setDescription('المبلغ').setMinValue(1).setRequired(true))
     .addStringOption(o => o.setName('السبب').setDescription('سبب التعويض')),
-
-  // الأسهم والاستثمارات
   new SlashCommandBuilder().setName('السوق').setDescription('أسعار السوق'),
   new SlashCommandBuilder()
     .setName('شراء')
@@ -307,8 +359,6 @@ const commands = [
     .addStringOption(o => o.setName('السهم').setDescription('رمز السهم').setRequired(true))
     .addIntegerOption(o => o.setName('الكمية').setDescription('العدد').setMinValue(1).setRequired(true)),
   new SlashCommandBuilder().setName('محفظة').setDescription('عرض محفظتك'),
-
-  // الألعاب
   new SlashCommandBuilder()
     .setName('حظ')
     .setDescription('تخمن رقماً 1-10 واربح 5 أضعاف')
@@ -341,7 +391,7 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 client.on('ready', async () => {
-  console.log(`✅ ${client.user.username} جاهز!`);
+  console.log(`✅ ${client.user.username} جاهز! نظام حفظ البيانات مفعّل ✅`);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
     console.log('✅ تم تحميل جميع الأوامر بنجاح!');
