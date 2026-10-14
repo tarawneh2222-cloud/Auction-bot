@@ -10,20 +10,18 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
 let storedData = {};
 
-// قراءة البيانات
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
       storedData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     }
-    console.log(`✅ تم تحميل بيانات ${Object.keys(storedData).length} مستخدم`);
+    console.log(`✅ بيانات محملة: ${Object.keys(storedData).length} مستخدم`);
   } catch (e) {
-    console.error('❌ خطأ في قراءة البيانات:', e);
+    console.error('❌ خطأ في تحميل البيانات:', e);
     storedData = {};
   }
 }
 
-// حفظ البيانات
 function saveData() {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(storedData, null, 2));
@@ -32,10 +30,10 @@ function saveData() {
   }
 }
 
-app.get('/', (_req, res) => res.send('✅ البوت يعمل بنظام الرسائل النصية'));
-app.listen(PORT, () => console.log(`🌐 يعمل على المنفذ ${PORT}`));
+app.get('/', (_req, res) => res.send('✅ البوت يعمل بنظام الأوامر المائلة'));
+app.listen(PORT, () => console.log('🌐 جاهز'));
 
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -61,100 +59,125 @@ function getUser(id) {
   return storedData[id];
 }
 
-// معالجة الرسائل النصية فقط
-client.on('messageCreate', async message => {
-  if (message.author.bot) return;
-  const userId = message.author.id;
-  const user = getUser(userId);
-  const content = message.content.trim();
+// تعريف الأوامر
+const commands = [
+  new SlashCommandBuilder().setName('حسابي').setDescription('عرض رصيدك ومعلومات حسابك'),
+  new SlashCommandBuilder().setName('راتب').setDescription('استلام راتب يومي'),
+  new SlashCommandBuilder().setName('صندوق').setDescription('فتح الصندوق اليومي المجاني'),
+  new SlashCommandBuilder()
+    .setName('ايداع')
+    .setDescription('إيداع مبلغ في البنك')
+    .addIntegerOption(o => o.setName('المبلغ').setDescription('المبلغ المراد إيداعه').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('سحب')
+    .setDescription('سحب مبلغ من البنك')
+    .addIntegerOption(o => o.setName('المبلغ').setDescription('المبلغ المراد سحبه').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('تعويض')
+    .setDescription('إضافة رصيد لمستخدم (للمدراء فقط)')
+    .setDefaultMemberPermissions('0')
+    .addStringOption(o => o.setName('المعرف').setDescription('معرف المستخدم').setRequired(true))
+    .addIntegerOption(o => o.setName('المبلغ').setDescription('المبلغ').setRequired(true).setMinValue(1))
+];
 
-  // !حسابي
-  if (content === '!حسابي') {
-    const invCount = Object.keys(user.investments).length;
-    await message.reply(
-      `💰 **معلومات حسابك**\n` +
-      `💵 الرصيد: **${user.balance} ريال**\n` +
-      `🏦 في البنك: **${user.bank} ريال**\n` +
-      `📈 استثماراتك: **${invCount} نوع**`
-    );
-  }
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-  // !راتب
-  else if (content === '!راتب') {
-    const now = Date.now();
-    if (now - user.lastDaily < 86400000) {
-      return await message.reply('⏰ عُد بعد 24 ساعة!');
-    }
-    user.lastDaily = now;
-    user.balance += 200;
-    saveData();
-    await message.reply('✅ استلمت راتبك: **200 ريال** 💵');
-  }
-
-  // !صندوق
-  else if (content === '!صندوق') {
-    const now = Date.now();
-    if (now - user.lastDailyBox < 86400000) {
-      return await message.reply('⏰ عُد غداً!');
-    }
-    const rewards = [50, 75, 100, 150, 200, 250, 500];
-    const amount = rewards[Math.floor(Math.random() * rewards.length)];
-    user.balance += amount;
-    user.lastDailyBox = now;
-    saveData();
-    await message.reply(`📦 وجدت: **${amount} ريال**! 🎉`);
-  }
-
-  // !ايداع المبلغ
-  else if (content.startsWith('!ايداع ')) {
-    const amount = parseInt(content.split(' ')[1]);
-    if (!amount || amount <= 0 || amount > user.balance) {
-      return await message.reply('❌ استخدم: !ايداع 500');
-    }
-    user.balance -= amount;
-    user.bank += amount;
-    saveData();
-    await message.reply(`✅ أودعت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
-  }
-
-  // !سحب المبلغ
-  else if (content.startsWith('!سحب ')) {
-    const amount = parseInt(content.split(' ')[1]);
-    if (!amount || amount <= 0 || amount > user.bank) {
-      return await message.reply('❌ استخدم: !سحب 500');
-    }
-    user.bank -= amount;
-    user.balance += amount;
-    saveData();
-    await message.reply(`✅ سحبت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
-  }
-
-  // !تعويض المعرف المبلغ (للمدراء فقط)
-  else if (content.startsWith('!تعويض ')) {
-    if (!message.member.permissions.has('Administrator')) {
-      return await message.reply('❌ غير مسموح لك بهذا الأمر!');
-    }
-    const parts = content.split(' ');
-    const targetId = parts[1];
-    const amount = parseInt(parts[2]);
-    if (!targetId || !amount) {
-      return await message.reply('❌ استخدم: !تعويض 123456789 1000');
-    }
-    if (!storedData[targetId]) {
-      storedData[targetId] = { balance: 0, bank: 0, investments: {}, lastDaily: 0, lastDailyBox: 0 };
-    }
-    storedData[targetId].balance += amount;
-    saveData();
-    await message.reply(`✅ تم تعويض المستخدم بـ **${amount} ريال**`);
+client.on('ready', async () => {
+  console.log(`✅ ${client.user.username} متصل بنجاح!`);
+  try {
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('✅ تم تحميل جميع الأوامر بنجاح!');
+  } catch (error) {
+    console.error('❌ خطأ في تحميل الأوامر:', error);
   }
 });
 
-client.on('ready', () => {
-  console.log(`✅ ${client.user.username} جاهز! استخدم الأوامر بعلامة !`);
+// معالجة الأوامر
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  const userId = interaction.user.id;
+  const user = getUser(userId);
+
+  try {
+    if (interaction.commandName === 'حسابي') {
+      const invCount = Object.keys(user.investments).length;
+      await interaction.reply(
+        `💰 **معلومات حسابك**\n` +
+        `💵 الرصيد: **${user.balance} ريال**\n` +
+        `🏦 في البنك: **${user.bank} ريال**\n` +
+        `📈 استثماراتك: **${invCount} نوع**`
+      );
+    }
+
+    else if (interaction.commandName === 'راتب') {
+      const now = Date.now();
+      if (now - user.lastDaily < 86400000) {
+        return await interaction.reply('⏰ عُد بعد 24 ساعة!', { ephemeral: false });
+      }
+      user.lastDaily = now;
+      user.balance += 200;
+      saveData();
+      await interaction.reply('✅ استلمت راتبك: **200 ريال** 💵');
+    }
+
+    else if (interaction.commandName === 'صندوق') {
+      const now = Date.now();
+      if (now - user.lastDailyBox < 86400000) {
+        return await interaction.reply('⏰ عُد غداً!', { ephemeral: false });
+      }
+      const rewards = [50, 75, 100, 150, 200, 250, 500];
+      const amount = rewards[Math.floor(Math.random() * rewards.length)];
+      user.balance += amount;
+      user.lastDailyBox = now;
+      saveData();
+      await interaction.reply(`📦 وجدت: **${amount} ريال**! 🎉`);
+    }
+
+    else if (interaction.commandName === 'ايداع') {
+      const amount = interaction.options.getInteger('المبلغ');
+      if (amount > user.balance) {
+        return await interaction.reply('❌ رصيدك لا يكفي!', { ephemeral: true });
+      }
+      user.balance -= amount;
+      user.bank += amount;
+      saveData();
+      await interaction.reply(`✅ أودعت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
+    }
+
+    else if (interaction.commandName === 'سحب') {
+      const amount = interaction.options.getInteger('المبلغ');
+      if (amount > user.bank) {
+        return await interaction.reply('❌ رصيدك في البنك لا يكفي!', { ephemeral: true });
+      }
+      user.bank -= amount;
+      user.balance += amount;
+      saveData();
+      await interaction.reply(`✅ سحبت **${amount} ريال**\n💰 رصيد: ${user.balance} | 🏦 بنك: ${user.bank}`);
+    }
+
+    else if (interaction.commandName === 'تعويض') {
+      if (!interaction.member.permissions.has('Administrator')) {
+        return await interaction.reply('❌ غير مسموح لك بهذا الأمر!', { ephemeral: true });
+      }
+      const targetId = interaction.options.getString('المعرف');
+      const amount = interaction.options.getInteger('المبلغ');
+      if (!storedData[targetId]) {
+        storedData[targetId] = { balance: 0, bank: 0, investments: {}, lastDaily: 0, lastDailyBox: 0 };
+      }
+      storedData[targetId].balance += amount;
+      saveData();
+      await interaction.reply(`✅ تم تعويض المستخدم بـ **${amount} ريال**`);
+    }
+  } catch (error) {
+    console.error('❌ خطأ:', error);
+    if (!interaction.replied) {
+      await interaction.reply({ content: '❌ حدث خطأ، حاول مرة أخرى!', ephemeral: true }).catch(() => {});
+    }
+  }
 });
 
 if (!process.env.DISCORD_TOKEN) {
-  console.error('❌ التوكن غير موجود!');
+  console.error('❌ التوكن غير موجود في المتغيرات البيئية!');
   process.exit(1);
 }
 
