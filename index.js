@@ -43,6 +43,8 @@ function getUser(id) {
       investments: {},
       lastDaily: 0,
       lastWeekly: 0
+      lastDailyBox: 0,
+    
     });
   }
   return userData.get(id);
@@ -286,6 +288,149 @@ client.on('interactionCreate', async interaction => {
     
     await interaction.reply(`✅ ✅ أنت الآن صاحب أعلى مزايدة! **${amount} ريال** على ${auction.item.icon} ؟؟؟`);
   }
+  }
+// 👇👇👇 الصق كود الألعاب هنا بالضبط 👇👇👇
+else if (commandName === 'حظ') {
+  const bet = options.getInteger('المبلغ');
+  const guess = options.getInteger('الرقم');
+  
+  if (bet <= 0 || bet > user.balance) return await interaction.reply('❌ مبلغ غير صالح!');
+  if (guess < 1 || guess > 10) return await interaction.reply('❌ اختر رقماً من 1 إلى 10 فقط!');
+  
+  user.balance -= bet;
+  const lucky = Math.floor(Math.random() * 10) + 1;
+  
+  if (guess === lucky) {
+    const prize = bet * 5;
+    user.balance += prize;
+    await interaction.reply(`🎯 الرقم السري كان: **${lucky}**\n🎉 توقعت صحيحاً! ربحت **${prize} ريال**!`);
+  } else {
+    await interaction.reply(`🎯 الرقم السري كان: **${lucky}**\n❌ لم يحالفك الحظ هذه المرة... حاول مجدداً!`);
+  }
+}
+
+else if (commandName === 'ورق') {
+  const bet = options.getInteger('المبلغ');
+  if (bet <= 0 || bet > user.balance) return await interaction.reply('❌ مبلغ غير صالح!');
+  
+  user.balance -= bet;
+  
+  const cards = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10];
+  const draw = () => cards[Math.floor(Math.random() * cards.length)];
+  
+  const player = draw() + draw();
+  const dealer = draw() + draw();
+  
+  let result = '';
+  let win = false;
+  
+  if (player > dealer) {
+    win = true;
+    result = `✅ فزت! بطاقاتك: **${player}** ضد الكازينو: **${dealer}**`;
+  } else if (player < dealer) {
+    result = `❌ خسرت! بطاقاتك: **${player}** ضد الكازينو: **${dealer}**`;
+  } else {
+    user.balance += bet;
+    result = `⚖️ تعادل! استرددت مبلغك: **${bet} ريال**`;
+  }
+  
+  if (win) {
+    user.balance += bet * 2;
+    result += `\n🎉 ربحت **${bet * 2} ريال**!`;
+  }
+  
+  await interaction.reply(result);
+}
+
+else if (commandName === 'عملة') {
+  const bet = options.getInteger('المبلغ');
+  const choice = options.getString('الوجه');
+  
+  if (bet <= 0 || bet > user.balance) return await interaction.reply('❌ مبلغ غير صالح!');
+  
+  user.balance -= bet;
+  const flip = Math.random() < 0.5 ? 'وجه' : 'خلف';
+  
+  if (choice === flip) {
+    user.balance += bet * 2;
+    await interaction.reply(`🪙 العملة على: **${flip === 'وجه' ? '👤 الوجه' : '🏛️ الخلف'}**\n🎉 فزت! ربحت **${bet * 2} ريال**!`);
+  } else {
+    await interaction.reply(`🪙 العملة على: **${flip === 'وجه' ? '👤 الوجه' : '🏛️ الخلف'}**\n❌ خسرت! حظاً طيباً في المرة القادمة`);
+  }
+}
+
+else if (commandName === 'نرد') {
+  const bet = options.getInteger('المبلغ');
+  const type = options.getString('النوع');
+  
+  if (bet <= 0 || bet > user.balance) return await interaction.reply('❌ مبلغ غير صالح!');
+  
+  const d1 = Math.floor(Math.random() * 6) + 1;
+  const d2 = Math.floor(Math.random() * 6) + 1;
+  const sum = d1 + d2;
+  
+  let win = false;
+  let multiplier = 1;
+  
+  if (type === 'زوج' && d1 === d2) {
+    win = true;
+    multiplier = 6;
+  } else if (type === 'فرد' && sum % 2 === 1) {
+    win = true;
+    multiplier = 2;
+  } else if (type === 'زوجي' && sum % 2 === 0 && d1 !== d2) {
+    win = true;
+    multiplier = 2;
+  } else if (type === 'مجموع_اكبر_من_7' && sum > 7) {
+    win = true;
+    multiplier = 2;
+  } else if (type === 'مجموع_اصغر_من_7' && sum < 7) {
+    win = true;
+    multiplier = 2;
+  }
+  
+  if (win) {
+    user.balance -= bet;
+    user.balance += bet * multiplier;
+    await interaction.reply(`🎲 النرد: **${d1}** و **${d2}** = **${sum}**\n🎉 فزت! ربحت **${bet * multiplier} ريال**!`);
+  } else {
+    user.balance -= bet;
+    await interaction.reply(`🎲 النرد: **${d1}** و **${d2}** = **${sum}**\n❌ خسرت **${bet} ريال**`);
+  }
+}
+
+else if (commandName === 'صندوق_يومي') {
+  const now = Date.now();
+  if (user.lastDailyBox && now - user.lastDailyBox < 24 * 60 * 60 * 1000) {
+    const remaining = Math.ceil((24 * 60 * 60 * 1000 - (now - user.lastDailyBox)) / (60 * 60 * 1000));
+    return await interaction.reply(`⏰ لقد فتحت الصندوق اليوم! عُد بعد **${remaining} ساعة**`);
+  }
+  
+  const rewards = [
+    { text: '💰 50 ريال', amount: 50, chance: 0.35 },
+    { text: '💵 100 ريال', amount: 100, chance: 0.25 },
+    { text: '💎 200 ريال', amount: 200, chance: 0.15 },
+    { text: '🤑 500 ريال', amount: 500, chance: 0.08 },
+    { text: '🎁 75 ريال', amount: 75, chance: 0.17 }
+  ];
+  
+  let roll = Math.random();
+  let selected = rewards[0];
+  let cumulative = 0;
+  for (const r of rewards) {
+    cumulative += r.chance;
+    if (roll < cumulative) {
+      selected = r;
+      break;
+    }
+  }
+  
+  user.balance += selected.amount;
+  user.lastDailyBox = now;
+  await interaction.reply(`📦 فتحت الصندوق اليومي ووجدت: **${selected.text}** 🎉`);
+}
+// 👆👆👆 نهاية كود الألعاب
+else if (commandName === 'تصنيف_اسبوعي') {
 
   else if (commandName === 'تصنيف_اسبوعي') {
     const now = Date.now();
@@ -457,7 +602,77 @@ const commands = [
         .setMinValue(10)
         .setRequired(true)
     ),
-  
+    new SlashCommandBuilder()
+    .setName('حظ')
+    .setDescription('تخمن رقماً من 1 إلى 10 واربح 5 أضعاف مبلغك')
+    .addIntegerOption(opt =>
+      opt.setName('المبلغ')
+        .setDescription('مبلغ الرهان')
+        .setMinValue(10)
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('الرقم')
+        .setDescription('تخمينك للرقم')
+        .setMinValue(1).setMaxValue(10)
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('ورق')
+    .setDescription('لعبة ورق بسيطة ضد الكازينو')
+    .addIntegerOption(opt =>
+      opt.setName('المبلغ')
+        .setDescription('مبلغ الرهان')
+        .setMinValue(10)
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('عملة')
+    .setDescription('ارم عملة واربح مبلغك المضاعف')
+    .addIntegerOption(opt =>
+      opt.setName('المبلغ')
+        .setDescription('مبلغ الرهان')
+        .setMinValue(10)
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName('الوجه')
+        .setDescription('ما الذي ستختاره؟')
+        .setRequired(true)
+        .addChoices(
+          { name: '👤 الوجه', value: 'وجه' },
+          { name: '🏛️ الخلف', value: 'خلف' }
+        )
+    ),
+
+  new SlashCommandBuilder()
+    .setName('نرد')
+    .setDescription('رمي نردتين واربح')
+    .addIntegerOption(opt =>
+      opt.setName('المبلغ')
+        .setDescription('مبلغ الرهان')
+        .setMinValue(10)
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName('النوع')
+        .setDescription('نوع الرهان')
+        .setRequired(true)
+        .addChoices(
+          { name: '✨ زوج متطابق (6× المبلغ)', value: 'زوج' },
+          { name: '🔢 مجموع فردي (2× المبلغ)', value: 'فرد' },
+          { name: '🔢 مجموع زوجي (2× المبلغ)', value: 'زوجي' },
+          { name: '📈 مجموع أكبر من 7 (2× المبلغ)', value: 'مجموع_اكبر_من_7' },
+          { name: '📉 مجموع أصغر من 7 (2× المبلغ)', value: 'مجموع_اصغر_من_7' }
+        )
+    ),
+
+  new SlashCommandBuilder()
+    .setName('صندوق_يومي')
+    .setDescription('افتح صندوقك اليومي واحصل على هدية مجانية'),
+
   new SlashCommandBuilder()
     .setName('تصنيف_اسبوعي')
     .setDescription('عرض قائمة أغنى اللاعبين هذا الأسبوع')
