@@ -42,8 +42,8 @@ function getUser(id) {
       inventory: [],
       investments: {},
       lastDaily: 0,
-      lastWeekly: 0
-      lastDailyBox: 0,
+      lastWeekly: 0,
+      lastDailyBox: 0
     
     });
   }
