@@ -1,14 +1,13 @@
 {
-  "name": "economy-bot",
-  "version": "1.0.0",
-  "description": "",
+  "name": "arabic-interactive-discord-economy",
+  "version": "3.0.0",
+  "description": "Interactive Arabic Discord economy bot using PostgreSQL",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=20" },
   "dependencies": {
-    "discord.js": "^14.16.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.0"
+    "discord.js": "^14.19.3",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
   }
 }
