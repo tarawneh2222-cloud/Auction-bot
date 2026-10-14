@@ -286,11 +286,13 @@ client.on('interactionCreate', async interaction => {
     auction.highestBid = amount;
     auction.highestBidder = interaction.user.id;
     
-    await interaction.reply(`✅ ✅ أنت الآن صاحب أعلى مزايدة! **${amount} ريال** على ${auction.item.icon} ؟؟؟`);
+        await interaction.reply('✅ أعلى مزايدة الآن!');
   }
-  }
+}  // ✅ أغلق هنا الكتلة السابقة بالكامل
+
 // 👇👇👇 الصق كود الألعاب هنا بالضبط 👇👇👇
 else if (commandName === 'حظ') {
+
   const bet = options.getInteger('المبلغ');
   const guess = options.getInteger('الرقم');
   
