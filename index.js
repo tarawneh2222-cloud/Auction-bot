@@ -288,8 +288,7 @@ client.on('interactionCreate', async interaction => {
     
         await interaction.reply('✅ أعلى مزايدة الآن!');
   }
-}  // ✅ أغلق هنا الكتلة السابقة بالكامل
-
+}  
 // 👇👇👇 الصق كود الألعاب هنا بالضبط 👇👇👇
 else if (commandName === 'حظ') {
 
