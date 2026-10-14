@@ -1,11 +1,41 @@
 'use strict';
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+let users = {};
+
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      users = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      console.log(`✅ تم تحميل بيانات ${Object.keys(users).length} مستخدم`);
+    }
+  } catch (e) {
+    console.log('📄 ملف بيانات جديد');
+    users = {};
+  }
+}
+
+function saveData() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
+}
+
+function getUser(id) {
+  if (!users[id]) {
+    users[id] = { balance: 1000, bank: 0 };
+    saveData();
+  }
+  return users[id];
+}
+
 app.get('/', (req, res) => res.send('✅ البوت يعمل'));
-app.listen(PORT, () => console.log('🌐 الخادم يعمل'));
+app.listen(PORT, () => console.log('🌐 جاهز'));
 
 const { Client, GatewayIntentBits } = require('discord.js');
 
@@ -17,52 +47,39 @@ const client = new Client({
   ]
 });
 
-// ملف بيانات بسيط
-const fs = require('fs');
-const DATA_FILE = './data.json';
-
-function loadData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    }
-  } catch (e) {
-    console.log('ملف بيانات جديد');
-  }
-  return {};
-}
-
-function saveData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-let users = loadData();
-
-function getUser(id) {
-  if (!users[id]) {
-    users[id] = { balance: 1000, bank: 0 };
-    saveData(users);
-  }
-  return users[id];
-}
+loadData();
 
 client.on('ready', () => {
-  console.log(`✅ ${client.user.tag} يعمل الآن! اكتب !حسابي`);
+  console.log(`✅ ${client.user.tag} جاهز! اكتب: !حسابي`);
 });
 
-// فقط أمر واحد للاختبار
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
   
-  console.log(`📩 وصلت رسالة: ${message.content} من ${message.author.username}`);
+  const content = message.content.trim();
+  const userId = message.author.id;
   
-  if (message.content.trim() === '!حسابي') {
-    const user = getUser(message.author.id);
-    await message.reply(`💰 رصيدك: ${user.balance} ريال`);
-    console.log('✅ تم الرد على الأمر');
+  // ✅ !حسابي
+  if (content === '!حسابي') {
+    const user = getUser(userId);
+    await message.reply(`💰 رصيدك: **${user.balance} ريال**\n🏦 في البنك: **${user.bank} ريال**`);
+    console.log(`✅ عرض رصيد لـ ${message.author.username}`);
+  }
+  
+  // ✅ !راتب
+  else if (content === '!راتب') {
+    const user = getUser(userId);
+    const now = Date.now();
+    if (!user.lastDaily || now - user.lastDaily > 86400000) {
+      user.lastDaily = now;
+      user.balance += 200;
+      saveData();
+      await message.reply('✅ استلمت راتبك: **200 ريال** 💵');
+    } else {
+      await message.reply('⏰ عُد غداً!');
+    }
   }
 });
 
 client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('✅ تم تسجيل الدخول'))
-  .catch(err => console.error('❌ خطأ في تسجيل الدخول:', err));
+  .catch(err => console.error('❌ خطأ:', err));
