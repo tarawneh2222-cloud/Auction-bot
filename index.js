@@ -19,15 +19,15 @@ const WORK_COOLDOWN = 3600000;
 const GAME_COOLDOWN = 10000;
 const XP_COOLDOWN = 60000;
 if (!TOKEN) throw new Error('Missing DISCORD_TOKEN environment variable.');
-if (!DATABASE_URL) throw new Error('Missing DATABASE_URL environment variable.');
+//if (!DATABASE_URL) throw new Error('Missing DATABASE_URL environment variable.');
 
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false },
-  max: 5,
-  connectionTimeoutMillis: 10000,
-  idleTimeoutMillis: 30000
-});
+//const pool = new Pool({
+ // connectionString: DATABASE_URL,
+ // ssl: process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false },
+ // max: 5,
+//  connectionTimeoutMillis: 10000,
+ // idleTimeoutMillis: 30000
+//});
 const JOBS = {
   'عامل': { salary: 150, xp: 10 }, 'طباخ': { salary: 220, xp: 15 },
   'ممرض': { salary: 300, xp: 20 }, 'مهندس': { salary: 450, xp: 25 },
