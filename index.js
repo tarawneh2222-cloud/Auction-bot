@@ -242,7 +242,8 @@ client.on(Events.InteractionCreate, async interaction => {
           content: `🤝 انضممت للمهمة!\n\nالأعضاء: ${m.members.length}/${m.required}\nالمكافأة الكلية: ${m.reward} عملة\nفي انتظار باقي الفريق...⏳`, 
           components: [] 
         });
-        break;
+        return;
+    
 
       // --- المزادات ---
       case 'bid_place':
