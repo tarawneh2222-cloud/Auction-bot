@@ -8,6 +8,7 @@ const path = require('node:path');
 const {
   Client,
   GatewayIntentBits,
+  PermissionFlagsBits,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -28,12 +29,16 @@ app.listen(PORT, '0.0.0.0', () => {
 
 const DATA_PATH = path.join(__dirname, 'data.json');
 
-// 📊 أسعار السوق والأصول
+// 📊 أسعار السوق والبورصة الموسعة
 const MARKET_ASSETS = {
   phones: { name: 'هواتف ذكية 📱', price: 1200 },
   cars: { name: 'سيارات فارهة 🚗', price: 15000 },
   stocks: { name: 'أسهم شركات 📊', price: 25000 },
-  lands: { name: 'أراضي تجارية 🏙️', price: 60000 }
+  lands: { name: 'أراضي تجارية 🏙️', price: 60000 },
+  gold: { name: 'سبائك ذهب 🪙', price: 45000 },
+  oil: { name: 'براميل نفط 🛢️', price: 35000 },
+  crypto: { name: 'عملات رقمية ₿', price: 80000 },
+  diamonds: { name: 'ألماس حر 💎', price: 150000 }
 };
 
 // 🛒 المتجر الشامل والأدوات
@@ -90,7 +95,7 @@ function getUserData(userId) {
       bank: 0,
       dailyLast: '',
       dailyStreak: 0,
-      assets: { phones: 0, cars: 0, stocks: 0, lands: 0 },
+      assets: { phones: 0, cars: 0, stocks: 0, lands: 0, gold: 0, oil: 0, crypto: 0, diamonds: 0 },
       inventory: { shield: 0, lockpick: 0, luckybox: 0, energy: 0 },
       businesses: { cafe: 0, gas: 0, tech: 0, factory: 0, realestate: 0 },
       lastClaimedIncome: Date.now(),
@@ -121,6 +126,38 @@ client.on(Events.MessageCreate, async message => {
   if (message.author.bot || !message.guild) return;
   const content = message.content.trim();
   const userId = message.author.id;
+
+  // 👑 أمر تعويض شخص من قبل الأدمن
+  if (content.startsWith('!تعويض')) {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      await message.reply('❌ هذا الأمر مخصص لإدارة السيرفر فقط!');
+      return;
+    }
+
+    const target = message.mentions.users.first();
+    const args = content.split(' ');
+    const amount = parseInt(args[2]);
+
+    if (!target || isNaN(amount) || amount <= 0) {
+      await message.reply('❌ **طريقة الاستخدام الصحيحة:**\n`!تعويض @الشخص [المبلغ]`\nمثال: `!تعويض @عمر 5000`');
+      return;
+    }
+
+    const db = readData();
+    const targetData = getUserData(target.id);
+
+    targetData.balance += amount;
+    db.users[target.id] = targetData;
+    saveData(db);
+
+    const embed = new EmbedBuilder()
+      .setTitle('💰 تم التعويض المالي بنجاح')
+      .setDescription(`قام الأدمن <@${userId}> بتعويض <@${target.id}> بمبلغ **${amount.toLocaleString()}$** بنجاح!`)
+      .setColor('#2ecc71');
+
+    await message.reply({ embeds: [embed] });
+    return;
+  }
 
   // 🏛️ اللوحة الرئيسية التفاعلية
   if (content === '!قائمة' || content === '!القائمة') {
@@ -154,10 +191,12 @@ client.on(Events.MessageCreate, async message => {
       .addFields(
         { name: '🏛️ القائمة العامة', value: '`!قائمة` لعرض لوحة التحكم بالأزرار' },
         { name: '💳 الحساب والبنك', value: '`!حساب` | `!إيداع [مبلغ]` | `!سحب [مبلغ]` | `!تحويل @الشخص [مبلغ]`' },
-        { name: '🛒 المتجر والأغراض', value: '`!متجر` لشراء الأغراض التفاعلية | `!استخدام [اسم_الغرض]`' },
+        { name: '🛒 المتجر والأغراض', value: '`!متجر` لشراء الأغراض | `!استخدام [اسم_الغرض]`' },
+        { name: '📊 البورصة والأصول', value: '`!سوق` لعرض الأسعار | `!شراء [اسم_الأصل] [العدد]`' },
         { name: '🏢 الاستثمار والأرض', value: '`!مشاريع` لشراء المشاريع | `!ارباح` لجمع أرباحك' },
         { name: '🕵️ السرقة والزواج', value: '`!نهب @الشخص` لسرقته | `!زواج @الشخص` | `!طلاق`' },
-        { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` للتبني | `!رحلة` لجلب الأموال والكنوز' },
+        { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` للتبني | `!رحلة` لجلب الأموال' },
+        { name: '👑 أمر الأدمن', value: '`!تعويض @الشخص [المبلغ]` لتعويض أي لاعب' },
         { name: '🎰 الألعاب والترفيه', value: '`!سلوتس [مبلغ]` | `!تخمين [1-10] [مبلغ]` | `!سباق [مبلغ]`' }
       )
       .setColor('#3498db');
@@ -181,6 +220,14 @@ client.on(Events.MessageCreate, async message => {
         { name: '🔥 الستريك اليومي', value: `${user.dailyStreak || 0} أيام`, inline: true }
       )
       .setColor('#2ecc71');
+
+    let assetList = '';
+    for (const key in user.assets) {
+      if (user.assets[key] > 0 && MARKET_ASSETS[key]) {
+        assetList += `• ${MARKET_ASSETS[key].name}: **${user.assets[key]}**\n`;
+      }
+    }
+    if (assetList) embed.addFields({ name: '📈 المحفظة الاستثمارية (البورصة)', value: assetList, inline: false });
 
     let invList = '';
     for (const key in user.inventory) {
@@ -220,6 +267,77 @@ client.on(Events.MessageCreate, async message => {
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
     await message.reply({ embeds: [embed], components: [row] });
+    return;
+  }
+
+  // 📊 عرض السوق والبورصة
+  if (content === '!سوق' || content === '!البورصة') {
+    const embed = new EmbedBuilder()
+      .setTitle('📊 سوق البورصة والأصول الموسع')
+      .setDescription('يمكنك الشراء عبر القائمة المنسدلة أدناه، أو كتابة الأمر:\n`!شراء [اسم_الأصل] [العدد]`\nمثال: `!شراء ذهب 3`')
+      .setColor('#e67e22');
+
+    const selectOptions = [];
+    for (const key in MARKET_ASSETS) {
+      const asset = MARKET_ASSETS[key];
+      embed.addFields({ name: asset.name, value: `السعر للقطعة: **${asset.price.toLocaleString()}$**`, inline: true });
+      selectOptions.push(
+        new StringSelectMenuOptionBuilder()
+          .setLabel(asset.name)
+          .setValue(`buy_asset_${key}`)
+          .setDescription(`شراء 1 بسعر ${asset.price.toLocaleString()}$`)
+      );
+    }
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('select_market_buy')
+      .setPlaceholder('🛒 اختر أصلاً لشرائه...')
+      .addOptions(selectOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+    await message.reply({ embeds: [embed], components: [row] });
+    return;
+  }
+
+  // 📥 شراء الأصول بالعدد المخصص: !شراء [الاسم] [العدد]
+  if (content.startsWith('!شراء')) {
+    const args = content.split(' ');
+    const query = args[1] ? args[1].toLowerCase() : '';
+    const quantity = parseInt(args[2]) || 1;
+
+    const mapKey = {
+      'هواتف': 'phones', 'هاتف': 'phones', 'phones': 'phones',
+      'سيارات': 'cars', 'سيارة': 'cars', 'cars': 'cars',
+      'أسهم': 'stocks', 'سهم': 'stocks', 'stocks': 'stocks',
+      'أراضي': 'lands', 'ارض': 'lands', 'lands': 'lands',
+      'ذهب': 'gold', 'gold': 'gold',
+      'نفط': 'oil', 'oil': 'oil',
+      'عملات': 'crypto', 'رقمية': 'crypto', 'crypto': 'crypto',
+      'ألماس': 'diamonds', 'الماس': 'diamonds', 'diamonds': 'diamonds'
+    }[query];
+
+    if (!mapKey || quantity <= 0) {
+      await message.reply('❌ **طريقة الاستخدام الصحيحة:**\n`!شراء [اسم_الأصل] [العدد]`\nمثال: `!شراء ذهب 2`\n\nالأصول المتاحة: `هواتف` | `سيارات` | `أسهم` | `أراضي` | `ذهب` | `نفط` | `عملات` | `ألماس`');
+      return;
+    }
+
+    const db = readData();
+    const user = getUserData(userId);
+    const asset = MARKET_ASSETS[mapKey];
+    const totalPrice = asset.price * quantity;
+
+    if (user.balance < totalPrice) {
+      await message.reply(`❌ رصيدك النقدي (**${user.balance.toLocaleString()}$**) لا يكفي لشراء ${quantity} من ${asset.name}! التكلفة الإجمالية: **${totalPrice.toLocaleString()}$**.`);
+      return;
+    }
+
+    user.balance -= totalPrice;
+    if (!user.assets) user.assets = {};
+    user.assets[mapKey] = (user.assets[mapKey] || 0) + quantity;
+    db.users[userId] = user;
+    saveData(db);
+
+    await message.reply(`✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت **${quantity}** من **${asset.name}** بمبلغ إجمالي **${totalPrice.toLocaleString()}$**.`);
     return;
   }
 
@@ -279,7 +397,7 @@ client.on(Events.MessageCreate, async message => {
     const targetData = getUserData(target.id);
 
     const now = Date.now();
-    const cooldown = 30 * 60 * 1000; // 30 دقيقة
+    const cooldown = 30 * 60 * 1000;
     if (now - (user.lastRob || 0) < cooldown) {
       const rem = Math.ceil((cooldown - (now - user.lastRob)) / (1000 * 60));
       await message.reply(`⏳ يجب عليك الانتظار **${rem} دقيقة** قبل تنفيذ عملية سرقة جديدة!`);
@@ -293,7 +411,6 @@ client.on(Events.MessageCreate, async message => {
 
     user.lastRob = now;
 
-    // التأكد من درع حماية الضحية
     if (targetData.inventory && targetData.inventory.shield > 0) {
       targetData.inventory.shield -= 1;
       db.users[userId] = user;
@@ -303,7 +420,6 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // نسبة النجاح (تزيد إن كان السارق يملك lockpick)
     let successRate = 0.45;
     if (user.inventory && user.inventory.lockpick > 0) {
       successRate = 0.70;
@@ -609,7 +725,12 @@ client.on(Events.MessageCreate, async message => {
     const db = readData();
     const user = getUserData(userId);
     const now = Date.now();
-    const last = user.lastClaimedIncome || now;
+    
+    if (!user.lastClaimedIncome) {
+      user.lastClaimedIncome = now - (10 * 60 * 1000);
+    }
+
+    const last = user.lastClaimedIncome;
     const hours = (now - last) / (1000 * 60 * 60);
 
     const b = user.businesses || {};
@@ -632,35 +753,6 @@ client.on(Events.MessageCreate, async message => {
     saveData(db);
 
     await message.reply(`💵 **تمت إضافة أرباح مشاريعك!** جمعت **${totalIncome.toLocaleString()}$** بنجاح إلى محفظتك! 💰`);
-    return;
-  }
-
-  // 📊 البورصة والسوق
-  if (content === '!سوق') {
-    const embed = new EmbedBuilder()
-      .setTitle('📊 سوق الأصول والبورصة')
-      .setDescription('اختر الأصل الذي ترغب في شرائه من القائمة أدناه: 🛒')
-      .setColor('#e67e22');
-
-    const selectOptions = [];
-    for (const key in MARKET_ASSETS) {
-      const asset = MARKET_ASSETS[key];
-      embed.addFields({ name: asset.name, value: `السعر: **${asset.price.toLocaleString()}$**`, inline: true });
-      selectOptions.push(
-        new StringSelectMenuOptionBuilder()
-          .setLabel(asset.name)
-          .setValue(`buy_asset_${key}`)
-          .setDescription(`شراء بسعر ${asset.price.toLocaleString()}$`)
-      );
-    }
-
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('select_market_buy')
-      .setPlaceholder('🛒 اختر أصلاً لشرائه...')
-      .addOptions(selectOptions);
-
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-    await message.reply({ embeds: [embed], components: [row] });
     return;
   }
 
@@ -756,7 +848,7 @@ client.on(Events.MessageCreate, async message => {
     const user = getUserData(userId);
 
     if (user.balance < bet) {
-      await message.reply('❌ رصيدك النقدي لا يكفي للشارع بالسباق!');
+      await message.reply('❌ رصيدك النقدي لا يكفي للمشاركة بالسباق!');
       return;
     }
 
@@ -784,20 +876,19 @@ client.on(Events.InteractionCreate, async interaction => {
   const db = readData();
   const user = getUserData(userId);
 
-  // الشراء من متجر الأدوات والتجهيزات
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_shop_buy') {
     const itemKey = interaction.values[0].replace('buy_item_', '');
     const item = SHOP_ITEMS[itemKey];
 
     if (!item) {
-      await interaction.reply({ content: '❌ الغرض غير موجود!', ephemeral: true });
+      await interaction.reply({ content: '❌ الغرض غير موجود!', flags: 64 });
       return;
     }
 
     if (user.balance < item.price) {
       await interaction.reply({
         content: `❌ رصيدك النقدي (**${user.balance.toLocaleString()}$**) لا يكفي لشراء ${item.name}!`,
-        ephemeral: true
+        flags: 64
       });
       return;
     }
@@ -810,25 +901,24 @@ client.on(Events.InteractionCreate, async interaction => {
 
     await interaction.reply({
       content: `✅ **تم الشراء بنجاح!** 🎉 اشتريت **${item.name}** بسعر **${item.price.toLocaleString()}$**. لاستخدامه اكتب: \`!استخدام ${itemKey}\``,
-      ephemeral: true
+      flags: 64
     });
     return;
   }
 
-  // الشراء من البورصة والسوق
   if (interaction.isStringSelectMenu() && interaction.customId === 'select_market_buy') {
     const assetKey = interaction.values[0].replace('buy_asset_', '');
     const asset = MARKET_ASSETS[assetKey];
 
     if (!asset) {
-      await interaction.reply({ content: '❌ الأصل غير موجود!', ephemeral: true });
+      await interaction.reply({ content: '❌ الأصل غير موجود!', flags: 64 });
       return;
     }
 
     if (user.balance < asset.price) {
       await interaction.reply({
         content: `❌ رصيدك النقدي (**${user.balance.toLocaleString()}$**) لا يكفي لشراء ${asset.name}!`,
-        ephemeral: true
+        flags: 64
       });
       return;
     }
@@ -840,8 +930,8 @@ client.on(Events.InteractionCreate, async interaction => {
     saveData(db);
 
     await interaction.reply({
-      content: `✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت 1 من **${asset.name}** بسعر **${asset.price.toLocaleString()}$**.`,
-      ephemeral: true
+      content: `✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت 1 من **${asset.name}** بسعر **${asset.price.toLocaleString()}$**.\n*(لشراء كمية أكبر استخدم الأمر: \`!شراء ${asset.name} [العدد]\`)*`,
+      flags: 64
     });
     return;
   }
@@ -854,7 +944,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
         await interaction.reply({
           content: `💳 **حسابك الشخصي:**\n• 💰 النقدي: **${user.balance.toLocaleString()}$**\n• 🏦 البنك: **${user.bank.toLocaleString()}$**\n• 🐾 الحيوان الأليف: **${petName}**`,
-          ephemeral: true
+          flags: 64
         });
         break;
       }
@@ -862,7 +952,7 @@ client.on(Events.InteractionCreate, async interaction => {
       case 'btn_daily': {
         const today = new Date().toDateString();
         if (user.dailyLast === today) {
-          await interaction.reply({ content: '⏳ لقد استلمت مكافأتك اليومية بالفعل اليوم!', ephemeral: true });
+          await interaction.reply({ content: '⏳ لقد استلمت مكافأتك اليومية بالفعل اليوم!', flags: 64 });
           return;
         }
         const yesterday = new Date();
@@ -877,25 +967,25 @@ client.on(Events.InteractionCreate, async interaction => {
         user.dailyLast = today;
         db.users[userId] = user;
         saveData(db);
-        await interaction.reply({ content: `🎁 مكافأتك اليومية: **${amount.toLocaleString()}$** (ستريك: ${user.dailyStreak} أيام 🔥)`, ephemeral: true });
+        await interaction.reply({ content: `🎁 مكافأتك اليومية: **${amount.toLocaleString()}$** (ستريك: ${user.dailyStreak} أيام 🔥)`, flags: 64 });
         break;
       }
 
       case 'btn_claim_income': {
         const now = Date.now();
-        const last = user.lastClaimedIncome || now;
+        const last = user.lastClaimedIncome || (now - 10 * 60 * 1000);
         const hours = (now - last) / (1000 * 60 * 60);
         const b = user.businesses || {};
         const hourlyIncome = ((b.cafe || 0) * 100) + ((b.gas || 0) * 350) + ((b.tech || 0) * 1200) + ((b.factory || 0) * 3000) + ((b.realestate || 0) * 8000);
 
         if (hourlyIncome === 0) {
-          await interaction.reply({ content: '❌ لا تملك مشاريع لجمع أرباحها حالياً!', ephemeral: true });
+          await interaction.reply({ content: '❌ لا تملك مشاريع لجمع أرباحها حالياً!', flags: 64 });
           return;
         }
 
         const totalIncome = Math.floor(hourlyIncome * hours);
         if (totalIncome <= 0) {
-          await interaction.reply({ content: '⏳ لم تتراكم أرباح كافية بعد، انتظر القليل من الوقت!', ephemeral: true });
+          await interaction.reply({ content: '⏳ لم تتراكم أرباح كافية بعد، انتظر القليل من الوقت!', flags: 64 });
           return;
         }
 
@@ -903,19 +993,19 @@ client.on(Events.InteractionCreate, async interaction => {
         user.lastClaimedIncome = now;
         db.users[userId] = user;
         saveData(db);
-        await interaction.reply({ content: `💵 **تم جمع أرباح مشاريعك بنجاح:** **${totalIncome.toLocaleString()}$**! 💰`, ephemeral: true });
+        await interaction.reply({ content: `💵 **تم جمع أرباح مشاريعك بنجاح:** **${totalIncome.toLocaleString()}$**! 💰`, flags: 64 });
         break;
       }
 
       case 'btn_shop':
-        await interaction.reply({ content: '🛒 لعرض متجر الأدوات والتجهيزات والشراء التفاعلي اكتب: `!متجر`', ephemeral: true });
+        await interaction.reply({ content: '🛒 لعرض متجر الأدوات والشراء اكتب: `!متجر`', flags: 64 });
         break;
 
       case 'btn_businesses': {
         const b = user.businesses || {};
         await interaction.reply({
           content: `🏢 **مشاريعك المملوكة حالياً:**\n• مقهى ☕: **${b.cafe || 0}**\n• محطة بنزين ⛽: **${b.gas || 0}**\n• شركة تكنولوجيا 💻: **${b.tech || 0}**\n• مصنع سيارات 🏭: **${b.factory || 0}**\n• شركة عقارات 🏙️: **${b.realestate || 0}**\n\nلشراء المزيد اكتب: \`!مشاريع\``,
-          ephemeral: true
+          flags: 64
         });
         break;
       }
@@ -924,21 +1014,21 @@ client.on(Events.InteractionCreate, async interaction => {
         const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
         await interaction.reply({
           content: `🐾 **حالة الحيوان الأليف:**\nالحيوان الحالي: **${petName}**\n• لتبني حيوان جديد اكتب: \`!الحيوانات\`\n• لإرساله في رحلة كنز اكتب: \`!رحلة\``,
-          ephemeral: true
+          flags: 64
         });
         break;
       }
 
       case 'btn_market':
-        await interaction.reply({ content: '📊 لعرض سوق البورصة والشراء التفاعلي اكتب: `!سوق`', ephemeral: true });
+        await interaction.reply({ content: '📊 لعرض سوق البورصة وشراء كميات اكتب: `!سوق` أو `!شراء [الأصل] [العدد]`', flags: 64 });
         break;
 
       case 'btn_games':
-        await interaction.reply({ content: '🎰 الألعاب المتاحة حالياً:\n• `!سلوتس [المبلغ]`\n• `!تخمين [1-10] [المبلغ]`\n• `!سباق [المبلغ]`', ephemeral: true });
+        await interaction.reply({ content: '🎰 الألعاب المتاحة حالياً:\n• `!سلوتس [المبلغ]`\n• `!تخمين [1-10] [المبلغ]`\n• `!سباق [المبلغ]`', flags: 64 });
         break;
 
       default:
-        await interaction.reply({ content: '✅ تم الإجراء بنجاح!', ephemeral: true });
+        await interaction.reply({ content: '✅ تم الإجراء بنجاح!', flags: 64 });
         break;
     }
   } catch (err) {
