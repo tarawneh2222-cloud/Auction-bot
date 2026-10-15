@@ -193,7 +193,7 @@ client.on(Events.MessageCreate, async message => {
         { name: '💳 الحساب والبنك', value: '`!حساب` | `!إيداع [مبلغ]` | `!سحب [مبلغ]` | `!تحويل @الشخص [مبلغ]`' },
         { name: '🛒 المتجر والأغراض', value: '`!متجر` لشراء الأغراض | `!استخدام [اسم_الغرض]`' },
         { name: '📊 البورصة والأصول', value: '`!سوق` لعرض الأسعار | `!شراء [اسم_الأصل] [العدد]`' },
-        { name: '🏢 الاستثمار والأرض', value: '`!مشاريع` لشراء المشاريع | `!ارباح` لجمع أرباحك' },
+        { name: '🏢 الاستثمار والمشاريع', value: '`!مشاريع` لعرض المشاريع | `!شراء_مشروع [الاسم] [العدد]` | `!ارباح`' },
         { name: '🕵️ السرقة والزواج', value: '`!نهب @الشخص` لسرقته | `!زواج @الشخص` | `!طلاق`' },
         { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` للتبني | `!رحلة` لجلب الأموال' },
         { name: '👑 أمر الأدمن', value: '`!تعويض @الشخص [المبلغ]` لتعويض أي لاعب' },
@@ -221,13 +221,21 @@ client.on(Events.MessageCreate, async message => {
       )
       .setColor('#2ecc71');
 
+    let busList = '';
+    for (const key in user.businesses) {
+      if (user.businesses[key] > 0 && BUSINESSES[key]) {
+        busList += `• ${BUSINESSES[key].name}: **${user.businesses[key]}**\n`;
+      }
+    }
+    if (busList) embed.addFields({ name: '🏢 المشاريع الاستثمارية المملوكة', value: busList, inline: false });
+
     let assetList = '';
     for (const key in user.assets) {
       if (user.assets[key] > 0 && MARKET_ASSETS[key]) {
         assetList += `• ${MARKET_ASSETS[key].name}: **${user.assets[key]}**\n`;
       }
     }
-    if (assetList) embed.addFields({ name: '📈 المحفظة الاستثمارية (البورصة)', value: assetList, inline: false });
+    if (assetList) embed.addFields({ name: '📈 البورصة والأصول', value: assetList, inline: false });
 
     let invList = '';
     for (const key in user.inventory) {
@@ -299,7 +307,83 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 📥 شراء الأصول بالعدد المخصص: !شراء [الاسم] [العدد]
+  // 🏢 عرض المشاريع والقائمة المنسدلة
+  if (content === '!مشاريع' || content === '!المشاريع') {
+    const user = getUserData(userId);
+    const b = user.businesses || {};
+
+    const embed = new EmbedBuilder()
+      .setTitle('🏢 المشاريع الاستثمارية والأرباح')
+      .setDescription('اختر المشروع من القائمة أدناه، أو اكتب:\n`!شراء_مشروع [اسم_المشروع] [العدد]`\nمثال: `!شراء_مشروع مقهى 2`')
+      .setColor('#8e44ad');
+
+    const selectOptions = [];
+    for (const key in BUSINESSES) {
+      const proj = BUSINESSES[key];
+      embed.addFields({
+        name: proj.name,
+        value: `التكلفة: **${proj.cost.toLocaleString()}$** | الأرباح: **${proj.incomePerHour}$/ساعة**\nالمملوك لديك: **${b[key] || 0}**`,
+        inline: false
+      });
+
+      selectOptions.push(
+        new StringSelectMenuOptionBuilder()
+          .setLabel(proj.name)
+          .setValue(`buy_business_${key}`)
+          .setDescription(`شراء 1 بسعر ${proj.cost.toLocaleString()}$`)
+      );
+    }
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('select_business_buy')
+      .setPlaceholder('🏢 اختر مشروعاً لشرائه...')
+      .addOptions(selectOptions);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+    await message.reply({ embeds: [embed], components: [row] });
+    return;
+  }
+
+  // 📥 شراء المشاريع بالعدد المخصص (تم وضعه أولاً لكي يتم فحصه قبل أمر !شراء العادي)
+  if (content.startsWith('!شراء_مشروع')) {
+    const args = content.split(' ');
+    const query = args[1] ? args[1].toLowerCase() : '';
+    const quantity = parseInt(args[2]) || 1;
+
+    const mapKey = {
+      'مقهى': 'cafe', 'كافيه': 'cafe', 'cafe': 'cafe',
+      'بنزين': 'gas', 'محطة': 'gas', 'gas': 'gas',
+      'تكنولوجيا': 'tech', 'شركة': 'tech', 'tech': 'tech',
+      'مصنع': 'factory', 'factory': 'factory',
+      'عقارات': 'realestate', 'realestate': 'realestate'
+    }[query];
+
+    if (!mapKey || quantity <= 0) {
+      await message.reply('❌ **طريقة الاستخدام الصحيحة:**\n`!شراء_مشروع [اسم_المشروع] [العدد]`\nمثال: `!شراء_مشروع مقهى 2`\n\nالمشاريع المتاحة: `مقهى` | `بنزين` | `تكنولوجيا` | `مصنع` | `عقارات`');
+      return;
+    }
+
+    const db = readData();
+    const user = getUserData(userId);
+    const proj = BUSINESSES[mapKey];
+    const totalPrice = proj.cost * quantity;
+
+    if (user.balance < totalPrice) {
+      await message.reply(`❌ رصيدك النقدي (**${user.balance.toLocaleString()}$**) لا يكفي لشراء ${quantity} من **${proj.name}**! التكلفة الإجمالية: **${totalPrice.toLocaleString()}$**.`);
+      return;
+    }
+
+    user.balance -= totalPrice;
+    if (!user.businesses) user.businesses = {};
+    user.businesses[mapKey] = (user.businesses[mapKey] || 0) + quantity;
+    db.users[userId] = user;
+    saveData(db);
+
+    await message.reply(`🎉 **مبروك!** اشتريت **${quantity}** من **${proj.name}** بنجاح بمبلغ إجمالي **${totalPrice.toLocaleString()}$**! بدأ بتوليد الأرباح لك.`);
+    return;
+  }
+
+  // 📥 شراء الأصول بالعدد المخصص
   if (content.startsWith('!شراء')) {
     const args = content.split(' ');
     const query = args[1] ? args[1].toLowerCase() : '';
@@ -338,6 +422,42 @@ client.on(Events.MessageCreate, async message => {
     saveData(db);
 
     await message.reply(`✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت **${quantity}** من **${asset.name}** بمبلغ إجمالي **${totalPrice.toLocaleString()}$**.`);
+    return;
+  }
+
+  // 💵 جمع أرباح المشاريع
+  if (content === '!ارباح' || content === '!أرباح') {
+    const db = readData();
+    const user = getUserData(userId);
+    const now = Date.now();
+    
+    if (!user.lastClaimedIncome) {
+      user.lastClaimedIncome = now - (10 * 60 * 1000);
+    }
+
+    const last = user.lastClaimedIncome;
+    const hours = (now - last) / (1000 * 60 * 60);
+
+    const b = user.businesses || {};
+    const hourlyIncome = ((b.cafe || 0) * 100) + ((b.gas || 0) * 350) + ((b.tech || 0) * 1200) + ((b.factory || 0) * 3000) + ((b.realestate || 0) * 8000);
+
+    if (hourlyIncome === 0) {
+      await message.reply('❌ لا تملك أي مشاريع حالياً لجمع أرباحها! اكتب `!مشاريع` لشراء أفكار استثمارية.');
+      return;
+    }
+
+    const totalIncome = Math.floor(hourlyIncome * hours);
+    if (totalIncome <= 0) {
+      await message.reply('⏳ لم تتراكم أرباح كافية بعد، عُد بعد قليل!');
+      return;
+    }
+
+    user.balance += totalIncome;
+    user.lastClaimedIncome = now;
+    db.users[userId] = user;
+    saveData(db);
+
+    await message.reply(`💵 **تمت إضافة أرباح مشاريعك!** جمعت **${totalIncome.toLocaleString()}$** بنجاح إلى محفظتك! 💰`);
     return;
   }
 
@@ -672,90 +792,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏢 المشاريع والأرباح
-  if (content === '!مشاريع') {
-    const user = getUserData(userId);
-    const b = user.businesses || {};
-
-    const embed = new EmbedBuilder()
-      .setTitle('🏢 المشاريع الاستثمارية')
-      .setDescription('شراء المشاريع يدر عليك أرباحاً تلقائية بمرور الوقت! لشراء مشروع اكتب `!شراء_مشروع [الاسم]`')
-      .addFields(
-        { name: '☕ مقهى (5,000$)', value: `المملوك: **${b.cafe || 0}** | الأرباح: 100$/ساعة\nالأمر: \`!شراء_مشروع مقهى\``, inline: false },
-        { name: '⛽ محطة بنزين (15,000$)', value: `المملوك: **${b.gas || 0}** | الأرباح: 350$/ساعة\nالأمر: \`!شراء_مشروع بنزين\``, inline: false },
-        { name: '💻 شركة تكنولوجيا (50,000$)', value: `المملوك: **${b.tech || 0}** | الأرباح: 1200$/ساعة\nالأمر: \`!شراء_مشروع تكنولوجيا\``, inline: false },
-        { name: '🏭 مصنع سيارات (120,000$)', value: `المملوك: **${b.factory || 0}** | الأرباح: 3000$/ساعة\nالأمر: \`!شراء_مشروع مصنع\``, inline: false },
-        { name: '🏙️ شركة عقارات (300,000$)', value: `المملوك: **${b.realestate || 0}** | الأرباح: 8000$/ساعة\nالأمر: \`!شراء_مشروع عقارات\``, inline: false }
-      )
-      .setColor('#8e44ad');
-
-    await message.reply({ embeds: [embed] });
-    return;
-  }
-
-  if (content.startsWith('!شراء_مشروع')) {
-    const type = content.split(' ')[1] ? content.split(' ')[1].toLowerCase() : '';
-    const mapKey = { 'مقهى': 'cafe', 'بنزين': 'gas', 'تكنولوجيا': 'tech', 'مصنع': 'factory', 'عقارات': 'realestate' }[type];
-
-    if (!mapKey) {
-      await message.reply('❌ حدد مشروعاً صحيحاً: `مقهى` | `بنزين` | `تكنولوجيا` | `مصنع` | `عقارات`');
-      return;
-    }
-
-    const db = readData();
-    const user = getUserData(userId);
-    const proj = BUSINESSES[mapKey];
-
-    if (user.balance < proj.cost) {
-      await message.reply(`❌ رصيدك النقدي لا يكفي لشراء **${proj.name}**! تكلفته **${proj.cost.toLocaleString()}$**.`);
-      return;
-    }
-
-    user.balance -= proj.cost;
-    if (!user.businesses) user.businesses = {};
-    user.businesses[mapKey] = (user.businesses[mapKey] || 0) + 1;
-    db.users[userId] = user;
-    saveData(db);
-
-    await message.reply(`🎉 **مبروك!** اشتريت **${proj.name}** بنجاح! بدأ المشروع بتوليد الأرباح لك.`);
-    return;
-  }
-
-  if (content === '!ارباح' || content === '!أرباح') {
-    const db = readData();
-    const user = getUserData(userId);
-    const now = Date.now();
-    
-    if (!user.lastClaimedIncome) {
-      user.lastClaimedIncome = now - (10 * 60 * 1000);
-    }
-
-    const last = user.lastClaimedIncome;
-    const hours = (now - last) / (1000 * 60 * 60);
-
-    const b = user.businesses || {};
-    const hourlyIncome = ((b.cafe || 0) * 100) + ((b.gas || 0) * 350) + ((b.tech || 0) * 1200) + ((b.factory || 0) * 3000) + ((b.realestate || 0) * 8000);
-
-    if (hourlyIncome === 0) {
-      await message.reply('❌ لا تملك أي مشاريع حالياً لجمع أرباحها! اكتب `!مشاريع` لشراء أفكار استثمارية.');
-      return;
-    }
-
-    const totalIncome = Math.floor(hourlyIncome * hours);
-    if (totalIncome <= 0) {
-      await message.reply('⏳ لم تتراكم أرباح كافية بعد، عُد بعد قليل!');
-      return;
-    }
-
-    user.balance += totalIncome;
-    user.lastClaimedIncome = now;
-    db.users[userId] = user;
-    saveData(db);
-
-    await message.reply(`💵 **تمت إضافة أرباح مشاريعك!** جمعت **${totalIncome.toLocaleString()}$** بنجاح إلى محفظتك! 💰`);
-    return;
-  }
-
   // 🎰 الألعاب (سلوتس، تخمين، وسباق السيارات)
   if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
     const args = content.split(' ');
@@ -870,7 +906,7 @@ client.on(Events.MessageCreate, async message => {
   }
 });
 
-// معالج التفاعلات والأزرار
+// معالج التفاعلات والأزرار وقوائم الاختيار
 client.on(Events.InteractionCreate, async interaction => {
   const userId = interaction.user.id;
   const db = readData();
@@ -931,6 +967,36 @@ client.on(Events.InteractionCreate, async interaction => {
 
     await interaction.reply({
       content: `✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت 1 من **${asset.name}** بسعر **${asset.price.toLocaleString()}$**.\n*(لشراء كمية أكبر استخدم الأمر: \`!شراء ${asset.name} [العدد]\`)*`,
+      flags: 64
+    });
+    return;
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === 'select_business_buy') {
+    const busKey = interaction.values[0].replace('buy_business_', '');
+    const proj = BUSINESSES[busKey];
+
+    if (!proj) {
+      await interaction.reply({ content: '❌ المشروع غير موجود!', flags: 64 });
+      return;
+    }
+
+    if (user.balance < proj.cost) {
+      await interaction.reply({
+        content: `❌ رصيدك النقدي (**${user.balance.toLocaleString()}$**) لا يكفي لشراء **${proj.name}** (التكلفة: ${proj.cost.toLocaleString()}$)!`,
+        flags: 64
+      });
+      return;
+    }
+
+    user.balance -= proj.cost;
+    if (!user.businesses) user.businesses = {};
+    user.businesses[busKey] = (user.businesses[busKey] || 0) + 1;
+    db.users[userId] = user;
+    saveData(db);
+
+    await interaction.reply({
+      content: `✅ **تمت عملية الشراء بنجاح!** 🎉 اشتريت 1 من **${proj.name}** بمبلغ **${proj.cost.toLocaleString()}$**.\n*(لشراء كمية أكبر استخدم الأمر: \`!شراء_مشروع ${proj.name} [العدد]\`)*`,
       flags: 64
     });
     return;
@@ -1001,14 +1067,9 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ content: '🛒 لعرض متجر الأدوات والشراء اكتب: `!متجر`', flags: 64 });
         break;
 
-      case 'btn_businesses': {
-        const b = user.businesses || {};
-        await interaction.reply({
-          content: `🏢 **مشاريعك المملوكة حالياً:**\n• مقهى ☕: **${b.cafe || 0}**\n• محطة بنزين ⛽: **${b.gas || 0}**\n• شركة تكنولوجيا 💻: **${b.tech || 0}**\n• مصنع سيارات 🏭: **${b.factory || 0}**\n• شركة عقارات 🏙️: **${b.realestate || 0}**\n\nلشراء المزيد اكتب: \`!مشاريع\``,
-          flags: 64
-        });
+      case 'btn_businesses':
+        await interaction.reply({ content: '🏢 لعرض قائمة المشاريع والقائمة المنسدلة للتفاعل اكتب: `!مشاريع`', flags: 64 });
         break;
-      }
 
       case 'btn_pets': {
         const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
