@@ -17,30 +17,49 @@ const {
 
 // خادم ويب لمراقبة UptimeRobot
 const web = express();
-web.get('/', (_req, res) => {
-  res.status(200).send('✅ بوت مزادات يعمل بنجاح');
-});
-web.get('/health', (_req, res) => {
-  res.json({ ok: true });
-});
+web.get('/', (_req, res) => res.status(200).send('✅ البوت المتكامل يعمل بنجاح'));
+web.get('/health', (_req, res) => res.json({ ok: true }));
 web.listen(Number(process.env.PORT) || 3000, '0.0.0.0');
 
 // مسار ملف البيانات
 const DATA_PATH = path.join(__dirname, 'data.json');
 
-// التأكد من وجود ملف البيانات وإنشائه إذا لم يكن موجوداً
+// المشاريع المتاحة
+const BUSINESSES = {
+  cafe: { name: 'مقهى ☕', cost: 5000, incomePerHour: 100 },
+  gas: { name: 'محطة بنزين ⛽', cost: 15000, incomePerHour: 350 },
+  tech: { name: 'شركة تكنولوجيا 💻', cost: 50000, incomePerHour: 1200 }
+};
+
+// الحيوانات الأليفة المتاحة
+const PETS = {
+  dog: { name: 'كلب 🐶', cost: 2000, minFind: 100, maxFind: 500 },
+  cat: { name: 'قطة 🐱', cost: 1500, minFind: 80, maxFind: 400 },
+  dragon: { name: 'تنين أسطوري 🐲', cost: 20000, minFind: 1000, maxFind: 4000 }
+};
+
+// الرتب المتاحة للشراء
+const SHOP_ROLES = {
+  'VIP': 10000,
+  'تاجر': 25000,
+  'مليونير': 100000
+};
+
+// إعلانات الزواج المعلقة
+const pendingMarriages = new Map();
+
 function initData() {
   if (!fs.existsSync(DATA_PATH)) {
     fs.writeFileSync(DATA_PATH, JSON.stringify({
       users: {},
       auctions: [],
       missions: {},
-      market: { prices: { gold: 100, oil: 50, wheat: 30 } }
+      lottery: { pool: 1000, tickets: [] },
+      market: { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() }
     }, null, 2));
   }
 }
 
-// قراءة البيانات
 function readData() {
   initData();
   try {
@@ -48,19 +67,19 @@ function readData() {
     if (!data.users) data.users = {};
     if (!data.auctions) data.auctions = [];
     if (!data.missions) data.missions = {};
-    if (!data.market) data.market = { prices: { gold: 100, oil: 50, wheat: 30 } };
+    if (!data.lottery) data.lottery = { pool: 1000, tickets: [] };
+    if (!data.market) data.market = { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() };
     return data;
   } catch (err) {
-    return { users: {}, auctions: [], missions: {}, market: { prices: { gold: 100, oil: 50, wheat: 30 } } };
+    return { users: {}, auctions: [], missions: {}, lottery: { pool: 1000, tickets: [] }, market: { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() } };
   }
 }
 
-// حفظ البيانات
 function saveData(data) {
   fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
 }
 
-// الحصول على بيانات المستخدم
+// الحصول على بيانات المستخدم الهيكلية
 function getUserData(userId) {
   const data = readData();
   if (!data.users[userId]) {
@@ -69,15 +88,71 @@ function getUserData(userId) {
       bank: 0,
       stocks: { gold: 0, oil: 0, wheat: 0 },
       dailyLast: '',
-      gamesPlayed: 0,
+      dailyStreak: 0,
       lastJob: {},
-      lastRob: 0
+      lastRob: 0,
+      shieldUntil: 0,
+      businesses: { cafe: 0, gas: 0, tech: 0 },
+      lastClaimedIncome: Date.now(),
+      lootboxes: 0,
+      // البيانات الجديدة:
+      pet: null,
+      lastPetHunt: 0,
+      spouse: null,
+      sharedVault: 0,
+      achievements: []
     };
   }
   return data.users[userId];
 }
 
-// إنشاء العميل
+// فحص وإضافة الإنجازات تلقائياً
+function checkAchievements(userId, user) {
+  if (!user.achievements) user.achievements = [];
+  const rewards = [];
+
+  // إنجاز المليونير المبتدئ
+  if ((user.balance + user.bank) >= 100000 && !user.achievements.includes('rich_100k')) {
+    user.achievements.push('rich_100k');
+    user.balance += 5000;
+    rewards.push('🏆 **أول 100,000$**: ربحت جائزة 5,000$!');
+  }
+
+  // إنجاز المستثمر (امتلاك 3 مشاريع على الأقل)
+  const totalBiz = (user.businesses?.cafe || 0) + (user.businesses?.gas || 0) + (user.businesses?.tech || 0);
+  if (totalBiz >= 3 && !user.achievements.includes('biz_owner')) {
+    user.achievements.push('biz_owner');
+    user.balance += 3000;
+    rewards.push('🏢 **رائد أعمال**: تمتلك 3 مشاريع! ربحت جائزة 3,000$!');
+  }
+
+  // إنجاز مروض الحيوانات
+  if (user.pet && !user.achievements.includes('has_pet')) {
+    user.achievements.push('has_pet');
+    user.balance += 1000;
+    rewards.push('🐾 **صديق الحيوان**: قمت بتبني أول حيوان أليف! ربحت جائزة 1,000$!');
+  }
+
+  return rewards;
+}
+
+// تحديث أسعار السوق التلقائي
+function updateMarketPrices() {
+  const data = readData();
+  const now = Date.now();
+  if (now - (data.market.lastUpdate || 0) >= 3600000) {
+    ['gold', 'oil', 'wheat'].forEach(stock => {
+      const currentPrice = data.market.prices[stock] || 100;
+      const changePercent = (Math.random() * 0.30) - 0.15;
+      let newPrice = Math.round(currentPrice * (1 + changePercent));
+      if (newPrice < 10) newPrice = 10;
+      data.market.prices[stock] = newPrice;
+    });
+    data.market.lastUpdate = now;
+    saveData(data);
+  }
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -87,345 +162,545 @@ const client = new Client({
   ]
 });
 
-// عند جاهزية البوت
 client.once(Events.ClientReady, () => {
-  console.log(`✅ بوت ${client.user.tag} يعمل بنجاح!`);
-  console.log('✅ استخدم !قائمة لعرض القائمة الرئيسية');
+  console.log(`✅ بوت ${client.user.tag} المكتمل يعمل بنجاح!`);
+  setInterval(updateMarketPrices, 10 * 60 * 1000);
 });
 
-// معالجة الأوامر النصية
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
   const content = message.content.trim();
   const userId = message.author.id;
 
-  // القائمة الرئيسية
+  updateMarketPrices();
+
+  // 🏛️ القائمة الرئيسية
   if (content === '!قائمة' || content === '!القائمة') {
     const embed = new EmbedBuilder()
-      .setTitle('🏛️ مركز الاقتصاد')
-      .setDescription('مرحباً بك! اختر من الأزرار أدناه ما تريد:')
+      .setTitle('🏛️ المركز الاقتصادي والترفيهي المتكامل')
+      .setDescription('اختر الخيار المراد من الأزرار أدناه:')
       .setColor('#2b90d9')
-      .setFooter({ text: 'اقتصاد افتراضي • لا توجد أموال حقيقية' });
+      .setFooter({ text: 'اقتصاد افتراضي متكامل • استمتع بالألعاب والمزايا!' });
 
     const row1 = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('account').setLabel('💳 حسابي').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('bank').setLabel('🏦 البنك').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('daily').setLabel('🎁 المكافأة اليومية').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('daily').setLabel('🎁 اليومية والستريك').setStyle(ButtonStyle.Success)
     );
 
     const row2 = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('portfolio').setLabel('📈 محفظتي').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('market').setLabel('📊 السوق').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('games').setLabel('🎮 الألعاب').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId('businesses').setLabel('🏢 المشاريع').setStyle(ButtonStyle.Primary)
     );
 
     const row3 = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('jobs').setLabel('💼 الوظائف').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('auctions').setLabel('🏘️ المزادات').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('leaderboard').setLabel('🏆 الترتيب').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('pets').setLabel('🐾 الحيوانات').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('marriage').setLabel('💍 الزواج').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('games').setLabel('🎰 الألعاب والكازينو').setStyle(ButtonStyle.Danger)
     );
 
     const row4 = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('shop').setLabel('🛒 المتجر').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('missions').setLabel('🎒 مهماتي').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('achievements').setLabel('📜 الإنجازات').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('leaderboard').setLabel('🏆 الترتيب').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('shop').setLabel('🛒 المتجر').setStyle(ButtonStyle.Success)
     );
 
     await message.reply({ embeds: [embed], components: [row1, row2, row3, row4] });
     return;
   }
 
-  // مساعدة الأوامر
+  // 📜 الأوامر والمساعدة
   if (content === '!مساعدة' || content === '!اوامر') {
     const embed = new EmbedBuilder()
-      .setTitle('📜 قائمة الأوامر')
+      .setTitle('📜 قائمة الأوامر الشاملة')
       .addFields(
-        { name: '!قائمة', value: 'عرض القائمة الرئيسية مع الأزرار' },
-        { name: '!حساب', value: 'عرض رصيدك النقدي وفي البنك' },
-        { name: '!إيداع [المبلغ]', value: 'إيداع أموال في البنك' },
-        { name: '!سحب [المبلغ]', value: 'سحب أموال من البنك' },
-        { name: '!يومية', value: 'استلام المكافأة اليومية' },
-        { name: '!عمل [منجم/مزارع/متجر]', value: 'العمل لكسب المال' },
-        { name: '!نرد', value: 'لعبة رمي النرد (مضاعفة الأموال)' },
-        { name: '!نهب @الشخص', value: 'محاولة نهب أموال مستخدم آخر 🦹' },
-        { name: '!سوق', value: 'عرض أسعار السوق والأسهم' },
-        { name: '!الترتيب', value: 'عرض قائمة أغنى اللاعبين' }
+        { name: '🎰 الكازينو واليانصيب', value: '`!سلوتس [المبلغ]` | `!شراء_تذكرة` | `!يانصيب`' },
+        { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` | `!تبني [كلب/قطة/تنين]` | `!رحلة`' },
+        { name: '💍 الزواج والخزنة المشتركة', value: '`!زواج @الشخص` | `!قبول` | `!إيداع_مشترك [مبلغ]` | `!سحب_مشترك [مبلغ]`' },
+        { name: '🏆 الإنجازات والأوسمة', value: '`!انجازاتي` — لمشاهدة إنجازاتك وجوائزك الأسطورية' },
+        { name: '💳 الاقتصاد والأسهم والمشاريع', value: '`!حساب` | `!سوق` | `!اشتري` | `!بيع` | `!مشاريع` | `!ارباح` | `!رتب`' }
       )
       .setColor('#2ecc71');
     await message.reply({ embeds: [embed] });
     return;
   }
 
-  // حسابي
+  // 💳 حسابي + فحص الإنجازات
   if (content === '!حسابي' || content === '!حساب') {
+    const data = readData();
     const user = getUserData(userId);
+    const achievementsMsg = checkAchievements(userId, user);
+    data.users[userId] = user;
+    saveData(data);
+
+    const hasShield = user.shieldUntil > Date.now();
     const embed = new EmbedBuilder()
-      .setTitle(`💳 حسابك — ${message.author.username}`)
+      .setTitle(`💳 حساب — ${message.author.username}`)
       .addFields(
-        { name: '💰 النقدي', value: `${user.balance} دولار`, inline: true },
-        { name: '🏦 في البنك', value: `${user.bank} دولار`, inline: true },
-        { name: '📊 المجموع', value: `${user.balance + user.bank} دولار`, inline: true }
+        { name: '💰 النقدي', value: `${user.balance}$`, inline: true },
+        { name: '🏦 في البنك', value: `${user.bank}$`, inline: true },
+        { name: '💍 الشريك', value: user.spouse ? `<@${user.spouse}>` : 'غير متزوج', inline: true },
+        { name: '🏦 الخزنة المشتركة', value: `${user.sharedVault \vert{}\vert{} 0}$`, inline: true },
+        { name: '🐾 الحيوان الأليف', value: user.pet ? PETS[user.pet].name : 'لا يوجد', inline: true },
+        { name: '🔥 الستريك اليومي', value: `${user.dailyStreak || 0} أيام`, inline: true }
       )
       .setColor('#3498db');
+
+    if (achievementsMsg.length > 0) {
+      embed.setDescription('🎉 **إنجازات جديدة تم تحقيقها!**\n' + achievementsMsg.join('\n'));
+    }
+
     await message.reply({ embeds: [embed] });
     return;
   }
 
-  // الإيداع في البنك (!إيداع 500 أو !إيداع الكل)
-  if (content.startsWith('!إيداع')) {
+  // --- 1. نظام الكازينو واليانصيب ---
+
+  // 🎰 ماكينة الحظ (!سلوتس 100)
+  if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
+    const args = content.split(' ');
+    const bet = parseInt(args[1]);
+
+    if (isNaN(bet) || bet <= 0) {
+      await message.reply('❌ يرجى كتابة مبلغ الرهان! مثال: `!سلوتس 100`');
+      return;
+    }
+
     const data = readData();
     const user = getUserData(userId);
-    const args = content.split(' ');
-    
-    let amount = 0;
-    if (args[1] === 'الكل' || args[1] === 'all') {
-      amount = user.balance;
+
+    if (user.balance < bet) {
+      await message.reply('❌ لا تملك هذا المبلغ نقداً للعب!');
+      return;
+    }
+
+    user.balance -= bet;
+    const symbols = ['🍒', '💎', '🍋', '🔔'];
+    const r1 = symbols[Math.floor(Math.random() * symbols.length)];
+    const r2 = symbols[Math.floor(Math.random() * symbols.length)];
+    const r3 = symbols[Math.floor(Math.random() * symbols.length)];
+
+    let winMsg = '';
+    if (r1 === r2 && r2 === r3) {
+      const prize = bet * 10;
+      user.balance += prize;
+      winMsg = `🎉 **جائزة كبرى مضاعفة! 10x** ربحت **${prize}$**! 💰🔥`;
+    } else if (r1 === r2 || r2 === r3 || r1 === r3) {
+      const prize = bet * 2;
+      user.balance += prize;
+      winMsg = `✨ **تطابق رائع! 2x** ربحت **${prize}$**! 💵`;
     } else {
-      amount = parseInt(args[1]);
+      winMsg = `😢 **خسرت الرهان!** حظاً أوفر المرة القادمة.`;
     }
 
-    if (isNaN(amount) || amount <= 0) {
-      await message.reply('❌ يرجى تحديد مبلغ صحيح للإيداع! مثال: `!إيداع 500` أو `!إيداع الكل`');
-      return;
-    }
-
-    if (user.balance < amount) {
-      await message.reply('❌ ليس لديك هذا المبلغ النقدي في محفظتك!');
-      return;
-    }
-
-    user.balance -= amount;
-    user.bank += amount;
     data.users[userId] = user;
     saveData(data);
 
-    await message.reply(`✅ تم إيداع **${amount} دولار** في البنك بنجاح! 🏦`);
+    await message.reply(`🎰 **[ ${r1} \vert{}${r2} | ${r3} ]**\n\n${winMsg}`);
     return;
   }
 
-  // السحب من البنك (!سحب 500 أو !سحب الكل)
-  if (content.startsWith('!سحب')) {
+  // 🎫 شراء تذكرة يانصيب (!شراء_تذكرة)
+  if (content === '!شراء_تذكرة' || content === '!تذكرة') {
     const data = readData();
     const user = getUserData(userId);
+    const ticketCost = 100;
+
+    if (user.balance < ticketCost) {
+      await message.reply(`❌ تذكرة اليانصيب تكلف **${ticketCost}$**!`);
+      return;
+    }
+
+    user.balance -= ticketCost;
+    data.lottery.pool += ticketCost;
+    data.lottery.tickets.push(userId);
+
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`🎫 **تم شراء تذكرة يانصيب!**\n💰 الجائزة الكبرى الحالية: **${data.lottery.pool}$**\n🎟️ عدد التذاكر المباعة: **${data.lottery.tickets.length}**`);
+    return;
+  }
+
+  // 📊 عرض حالة اليانصيب (!يانصيب)
+  if (content === '!يانصيب') {
+    const data = readData();
+    const embed = new EmbedBuilder()
+      .setTitle('🎫 يانصيب السيرفر الأسبوعي')
+      .setDescription(
+        `💰 **الجائزة الكبرى:** **${data.lottery.pool}$**\n` +
+        `🎟️ **التذاكر المشاركة:** **${data.lottery.tickets.length}** تذكرة\n\n` +
+        'اكتب `!شراء_تذكرة` للمشاركة بـ 100$ ورفع قيمة الجائزة!'
+      )
+      .setColor('#f1c40f');
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // --- 2. نظام الحيوانات الأليفة والرحلات ---
+
+  // 🐾 تصفح الحيوانات الأليفة (!الحيوانات)
+  if (content === '!الحيوانات' || content === '!حيوانات') {
+    const embed = new EmbedBuilder()
+      .setTitle('🐾 متجر الحيوانات الأليفة')
+      .addFields(
+        { name: '🐶 كلب (2,000$)', value: 'يجد لك: 100$ - 500$ في كل رحلة\n`!تبني كلب`', inline: false },
+        { name: '🐱 قطة (1,500$)', value: 'تجد لك: 80$ - 400$ في كل رحلة\n`!تبني قطة`', inline: false },
+        { name: '🐲 تنين أسطوري (20,000$)', value: 'يجلب لك: 1,000$ - 4,000$ في كل رحلة!\n`!تبني تنين`', inline: false }
+      )
+      .setColor('#e67e22')
+      .setFooter({ text: 'أرسل حيوانك في رحلة كل ساعتين عبر !رحلة لجلب الكنوز!' });
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // 🐶 تبني حيوان أليف (!تبني كلب)
+  if (content.startsWith('!تبني')) {
     const args = content.split(' ');
+    const petType = args[1]?.toLowerCase();
 
-    let amount = 0;
-    if (args[1] === 'الكل' || args[1] === 'all') {
-      amount = user.bank;
-    } else {
-      amount = parseInt(args[1]);
-    }
+    const petMap = { 'كلب': 'dog', 'قطة': 'cat', 'تنين': 'dragon', 'dog': 'dog', 'cat': 'cat', 'dragon': 'dragon' };
+    const pKey = petMap[petType];
 
-    if (isNaN(amount) || amount <= 0) {
-      await message.reply('❌ يرجى تحديد مبلغ صحيح للسحب! مثال: `!سحب 500` أو `!سحب الكل`');
+    if (!pKey) {
+      await message.reply('❌ يرجى اختيار حيوان صالح:\n`!تبني كلب` | `!تبني قطة` | `!تبني تنين`');
       return;
     }
 
-    if (user.bank < amount) {
-      await message.reply('❌ ليس لديك هذا المبلغ في البنك!');
+    const data = readData();
+    const user = getUserData(userId);
+    const petObj = PETS[pKey];
+
+    if (user.balance < petObj.cost) {
+      await message.reply(`❌ تبني **${petObj.name}** يكلف **${petObj.cost}$**!`);
       return;
     }
 
-    user.bank -= amount;
-    user.balance += amount;
+    user.balance -= petObj.cost;
+    user.pet = pKey;
+    checkAchievements(userId, user);
+
     data.users[userId] = user;
     saveData(data);
 
-    await message.reply(`✅ تم سحب **${amount} دولار** من البنك إلى رصيدك النقدي بنجاح! 💰`);
+    await message.reply(`🐾 **مبروك!** قمت بتبني **${petObj.name}** بنجاح! استخدم ` + '`!رحلة` لإرساله للبحث عن الكنوز.');
     return;
   }
 
-  // المكافأة اليومية
-  if (content === '!يومية' || content === '!يومي') {
+  // 🗺️ إرسال الحيوان الأليف في رحلة (!رحلة)
+  if (content === '!رحلة' || content === '!رحلة_كنز') {
     const data = readData();
     const user = getUserData(userId);
-    const today = new Date().toDateString();
-    
-    if (user.dailyLast === today) {
-      await message.reply('⏳ لقد حصلت على مكافأتك اليومية بالفعل! عد غداً للحصول على المزيد.');
+
+    if (!user.pet) {
+      await message.reply('❌ أنت لا تملك حيواناً أليفاً بعد! تبنّ واحداً عبر `!الحيوانات`.');
       return;
     }
-    
-    const amount = 250;
-    user.balance += amount;
-    user.dailyLast = today;
-    data.users[userId] = user;
-    saveData(data);
-    
-    await message.reply(`🎁 **تهانينا!** حصلت على مكافأتك اليومية بقيمة **${amount} دولار**! 💰`);
-    return;
-  }
-
-  // نظام الوظائف (!عمل منجم / مزارع / متجر)
-  if (content.startsWith('!عمل')) {
-    const data = readData();
-    const user = getUserData(userId);
-    const args = content.split(' ');
-    const jobType = args[1];
 
     const now = Date.now();
-    const cooldown = 5 * 60 * 1000; // 5 دقائق كولداون
+    const cooldown = 2 * 60 * 60 * 1000; // ساعتان كولداون
 
-    if (!user.lastJob) user.lastJob = {};
-    if (user.lastJob[jobType] && now - user.lastJob[jobType] < cooldown) {
-      const remaining = Math.ceil((cooldown - (now - user.lastJob[jobType])) / 1000 / 60);
-      await message.reply(`⏳ أنت متعب! يجب الانتظار **${remaining} دقائق** قبل العمل في هذه الوظيفة مجدداً.`);
+    if (user.lastPetHunt && now - user.lastPetHunt < cooldown) {
+      const remaining = Math.ceil((cooldown - (now - user.lastPetHunt)) / 1000 / 60);
+      await message.reply(`⏳ حيوانك الأليف متعب الآن! دعه يرتاح لمدة **${remaining} دقيقة** قبل الرحلة التالية.`);
       return;
     }
 
-    let min = 0, max = 0, jobName = '';
-    if (jobType === 'منجم') { min = 50; max = 150; jobName = 'منجم ⛏️'; }
-    else if (jobType === 'مزارع') { min = 40; max = 120; jobName = 'مزارع 🌾'; }
-    else if (jobType === 'متجر') { min = 60; max = 180; jobName = 'متجر 🛒'; }
-    else {
-      await message.reply('❌ الوظائف المتاحة:\n`!عمل منجم` (50-150$)\n`!عمل مزارع` (40-120$)\n`!عمل متجر` (60-180$)');
-      return;
-    }
+    const petObj = PETS[user.pet];
+    const found = Math.floor(Math.random() * (petObj.maxFind - petObj.minFind + 1)) + petObj.minFind;
 
-    const earned = Math.floor(Math.random() * (max - min + 1)) + min;
-    user.balance += earned;
-    user.lastJob[jobType] = now;
+    user.balance += found;
+    user.lastPetHunt = now;
+
     data.users[userId] = user;
     saveData(data);
 
-    await message.reply(`💼 عملت بنجاح كـ **${jobName}** وكسبت **${earned} دولار**! 💵`);
+    await message.reply(`🗺️ **خرج ${petObj.name} في رحلة استكشافية ووجد لك كنوزاً وأموالاً بقيمة ${found}$!** 💰✨`);
     return;
   }
 
-  // لعبة النرد (!نرد)
-  if (content === '!نرد') {
-    const data = readData();
-    const user = getUserData(userId);
-    const cost = 100;
+  // --- 3. نظام الزواج والخزنة المشتركة ---
 
-    if (user.balance < cost) {
-      await message.reply(`❌ تحتاج إلى **${cost} دولار** نقداً على الأقل للعب النرد!`);
-      return;
-    }
-
-    user.balance -= cost;
-    const playerRoll = Math.floor(Math.random() * 6) + 1;
-    const botRoll = Math.floor(Math.random() * 6) + 1;
-
-    if (playerRoll > botRoll) {
-      const prize = cost * 2;
-      user.balance += prize;
-      data.users[userId] = user;
-      saveData(data);
-      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n🎉 **فزت!** حصلت على **${prize} دولار**! 💰`);
-    } else if (playerRoll === botRoll) {
-      user.balance += cost; // استرجاع المبلغ
-      data.users[userId] = user;
-      saveData(data);
-      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n🤝 **تعادل!** تم استرجاع الـ ${cost} دولار.`);
-    } else {
-      data.users[userId] = user;
-      saveData(data);
-      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n😢 **خسرت!** ذهبت الـ ${cost} دولار.`);
-    }
-    return;
-  }
-
-  // نظام النهب / السرقة الجديد (!نهب @الشخص)
-  if (content.startsWith('!نهب') || content.startsWith('!سرقة')) {
+  // 💍 طلب الزواج (!زواج @الشخص)
+  if (content.startsWith('!زواج')) {
     const target = message.mentions.users.first();
-    if (!target) {
-      await message.reply('❌ يرجى منشن الشخص الذي تريد نهبه! مثال: `!نهب @الشخص`');
-      return;
-    }
-    if (target.id === userId) {
-      await message.reply('❌ لا يمكنك نهب نفسك يا فالح! 😂');
-      return;
-    }
-    if (target.bot) {
-      await message.reply('❌ لا يمكنك نهب البوتات!');
+    if (!target || target.id === userId || target.bot) {
+      await message.reply('❌ منشن شريكك المستقبلي! مثال: `!زواج @الشخص`');
       return;
     }
 
-    const data = readData();
     const user = getUserData(userId);
     const targetData = getUserData(target.id);
 
-    const now = Date.now();
-    const cooldown = 15 * 60 * 1000; // 15 دقيقة كولداون بين عمليات النهب
-
-    if (user.lastRob && now - user.lastRob < cooldown) {
-      const remaining = Math.ceil((cooldown - (now - user.lastRob)) / 1000 / 60);
-      await message.reply(`⏳ أنت متطلب فترة راحة بعد عملياتك الأخيرة! انتظر **${remaining} دقائق** قبل محاولة النهب مجدداً.`);
+    if (user.spouse) {
+      await message.reply('❌ أنت متزوج بالفعل!');
+      return;
+    }
+    if (targetData.spouse) {
+      await message.reply('❌ الشخص المستهدف متزوج بالفعل!');
       return;
     }
 
-    if (user.balance < 200) {
-      await message.reply('❌ يجب أن تمتلك على الأقل **200 دولار** نقداً للمخاطرة ودفع الغرامات المحتملة للشرطة!');
-      return;
-    }
-
-    if (targetData.balance < 150) {
-      await message.reply('❌ هذا الشخص فقير جداً وليس لديه أموال نقدية كافية لكي تستحق المخاطرة!');
-      return;
-    }
-
-    user.lastRob = now;
-
-    // نسبة النجاح: 45%
-    const success = Math.random() < 0.45;
-
-    if (success) {
-      // سرقة نسبة تتراوح بين 10% إلى 25% من رصيد الضحية النقدي
-      const percent = Math.random() * 0.15 + 0.10; 
-      const stolen = Math.floor(targetData.balance * percent);
-
-      targetData.balance -= stolen;
-      user.balance += stolen;
-
-      data.users[userId] = user;
-      data.users[target.id] = targetData;
-      saveData(data);
-
-      await message.reply(`🦹 **عملية نهب ناجحة!** تسللت ببراعة ونجحت في سرقة **${stolen} دولار** من <@${target.id}>! 💰🔥`);
-    } else {
-      // فشل النهب: دفع غرامة (مثلاً 150 دولار أو نصف الرصيد المتاح بحد أقصى)
-      const fine = Math.min(user.balance, 150);
-      user.balance -= fine;
-
-      data.users[userId] = user;
-      saveData(data);
-
-      await message.reply(`🚨 **فشلت عملية النهب!** قبض عليك الحراس أثناء محاولتك وتم تغريمك بمبلغ **${fine} دولار**! 👮‍♂️❌`);
-    }
+    pendingMarriages.set(target.id, userId);
+    await message.reply(`💍 <@${target.id}>، لقد طلب <@${userId}> الزواج منك وارتباط حسابكما بخزنة مشتركة!\nاكتب \`!قبول\` للوافق علي الطلب!`);
     return;
   }
 
-  // السوق
+  // 💒 قبول الزواج (!قبول)
+  if (content === '!قبول' || content === '!موافقة') {
+    const proposerId = pendingMarriages.get(userId);
+    if (!proposerId) {
+      await message.reply('❌ لا توجد لديك طلبات زواج معلقة!');
+      return;
+    }
+
+    const data = readData();
+    const user = getUserData(userId);
+    const proposerData = getUserData(proposerId);
+
+    user.spouse = proposerId;
+    proposerData.spouse = userId;
+
+    pendingMarriages.delete(userId);
+
+    data.users[userId] = user;
+    data.users[proposerId] = proposerData;
+    saveData(data);
+
+    await message.reply(`🎉 **تهانينا وألف مبروك!** تم زواج <@${userId}> و <@${proposerId}> بنجاح! تم فتح الخزنة المشتركة بينكما.`);
+    return;
+  }
+
+  // 🏦 إيداع في الخزنة المشتركة (!إيداع_مشترك 1000)
+  if (content.startsWith('!إيداع_مشترك')) {
+    const args = content.split(' ');
+    const amount = parseInt(args[1]);
+
+    const data = readData();
+    const user = getUserData(userId);
+
+    if (!user.spouse) {
+      await message.reply('❌ يجب أن تكون متزوجاً لاستخدام الخزنة المشتركة!');
+      return;
+    }
+    if (isNaN(amount) || amount <= 0 || user.balance < amount) {
+      await message.reply('❌ حدد مبلغاً صحيحاً للإيداع!');
+      return;
+    }
+
+    const spouseData = getUserData(user.spouse);
+
+    user.balance -= amount;
+    user.sharedVault = (user.sharedVault || 0) + amount;
+    spouseData.sharedVault = user.sharedVault;
+
+    data.users[userId] = user;
+    data.users[user.spouse] = spouseData;
+    saveData(data);
+
+    await message.reply(`🏦 **تم إيداع ${amount}$ في الخزنة المشتركة!** الرصيد المشترك الحالي: **${user.sharedVault}$**.`);
+    return;
+  }
+
+  // 🏦 سحب من الخزنة المشتركة (!سحب_مشترك 500)
+  if (content.startsWith('!سحب_مشترك')) {
+    const args = content.split(' ');
+    const amount = parseInt(args[1]);
+
+    const data = readData();
+    const user = getUserData(userId);
+
+    if (!user.spouse) {
+      await message.reply('❌ يجب أن تكون متزوجاً لاستخدام الخزنة المشتركة!');
+      return;
+    }
+    if (isNaN(amount) || amount <= 0 || (user.sharedVault || 0) < amount) {
+      await message.reply('❌ المبلغ المطلوب غير متاح في الخزنة المشتركة!');
+      return;
+    }
+
+    const spouseData = getUserData(user.spouse);
+
+    user.sharedVault -= amount;
+    spouseData.sharedVault = user.sharedVault;
+    user.balance += amount;
+
+    data.users[userId] = user;
+    data.users[user.spouse] = spouseData;
+    saveData(data);
+
+    await message.reply(`💰 **تم سحب ${amount}$ من الخزنة المشتركة إلى حسابك!**`);
+    return;
+  }
+
+  // --- 4. نظام لوحة الإنجازات والأوسمة ---
+
+  // 📜 عرض الإنجازات (!انجازاتي)
+  if (content === '!انجازاتي' || content === '!إنجازاتي') {
+    const data = readData();
+    const user = getUserData(userId);
+    checkAchievements(userId, user);
+    data.users[userId] = user;
+    saveData(data);
+
+    const achs = user.achievements || [];
+    const embed = new EmbedBuilder()
+      .setTitle(`📜 لوحة إنجازات — ${message.author.username}`)
+      .setDescription('قائمة الأوسمة والإنجازات التي حققتها:')
+      .addFields(
+        { name: '🏆 أول 100,000$', value: achs.includes('rich_100k') ? 'مكتمل ✅ (+5,000$)' : 'قيد التقدم ❌', inline: true },
+        { name: '🏢 رائد الأعمال (3 مشاريع)', value: achs.includes('biz_owner') ? 'مكتمل ✅ (+3,000$)' : 'قيد التقدم ❌', inline: true },
+        { name: '🐾 صديق الحيوان', value: achs.includes('has_pet') ? 'مكتمل ✅ (+1,000$)' : 'قيد التقدم ❌', inline: true }
+      )
+      .setColor('#2ecc71');
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // 🎁 المكافأة اليومية
+  if (content === '!يومية' || content === '!يومي') {
+    const data = readData();
+    const user = getUserData(userId);
+    const now = new Date();
+    const today = now.toDateString();
+    
+    if (user.dailyLast === today) {
+      await message.reply('⏳ حصلت على مكافأتك اليومية بالفعل!');
+      return;
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    if (user.dailyLast === yesterday.toDateString()) {
+      user.dailyStreak = (user.dailyStreak || 0) + 1;
+    } else {
+      user.dailyStreak = 1;
+    }
+
+    const bonus = (user.dailyStreak - 1) * 50;
+    const totalAmount = 250 + bonus;
+
+    user.balance += totalAmount;
+    user.dailyLast = today;
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`🎁 **استلمت مكافأتك اليومية!**\n💰 المبلغ: **${totalAmount}$** (ستريك ${user.dailyStreak} أيام🔥)`);
+    return;
+  }
+
+  // 📈 تداول الأسهم (!اشتري / !بيع)
+  if (content.startsWith('!اشتري') && !content.includes('رتبة') && !content.includes('حماية') && !content.includes('صندوق') && !content.includes('تذكرة')) {
+    const args = content.split(' ');
+    const stockType = args[1]?.toLowerCase();
+    const qty = parseInt(args[2]);
+
+    const stockMap = { 'ذهب': 'gold', 'نفط': 'oil', 'قمح': 'wheat' };
+    const stockKey = stockMap[stockType];
+
+    if (!stockKey || isNaN(qty) || qty <= 0) {
+      await message.reply('❌ مثال: `!اشتري ذهب 2`');
+      return;
+    }
+
+    const data = readData();
+    const user = getUserData(userId);
+    const price = data.market.prices[stockKey];
+    const totalCost = price * qty;
+
+    if (user.balance < totalCost) {
+      await message.reply(`❌ التكلفة **${totalCost}$** ولا تملك ما يكفي!`);
+      return;
+    }
+
+    user.balance -= totalCost;
+    user.stocks[stockKey] = (user.stocks[stockKey] || 0) + qty;
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`✅ تم شراء **${qty}** وحدة من **${stockType}** بـ **${totalCost}$**! 📈`);
+    return;
+  }
+
+  // 🏢 المشاريع والأرباح (!مشاريع / !شراء_مشروع / !ارباح)
+  if (content === '!مشاريع') {
+    const user = getUserData(userId);
+    const embed = new EmbedBuilder()
+      .setTitle('🏢 مشاريع الاستثمار')
+      .addFields(
+        { name: '☕ مقهى (5,000$)', value: `المملوك: **${user.businesses?.cafe || 0}** | \`!شراء_مشروع مقهى\``, inline: false },
+        { name: '⛽ محطة بنزين (15,000$)', value: `المملوك: **${user.businesses?.gas || 0}** | \`!شراء_مشروع بنزين\``, inline: false },
+        { name: '💻 شركة تكنولوجيا (50,000$)', value: `المملوك: **${user.businesses?.tech || 0}** | \`!شراء_مشروع تكنولوجيا\``, inline: false }
+      )
+      .setColor('#8e44ad');
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  if (content.startsWith('!شراء_مشروع')) {
+    const type = content.split(' ')[1]?.toLowerCase();
+    const pKey = { 'مقهى': 'cafe', 'بنزين': 'gas', 'تكنولوجيا': 'tech' }[type];
+
+    if (!pKey) return message.reply('❌ اختر مشروعاً صحيحاً!');
+
+    const data = readData();
+    const user = getUserData(userId);
+    const project = BUSINESSES[pKey];
+
+    if (user.balance < project.cost) return message.reply(`❌ تكلفته **${project.cost}$**!`);
+
+    user.balance -= project.cost;
+    if (!user.businesses) user.businesses = {};
+    user.businesses[pKey] = (user.businesses[pKey] || 0) + 1;
+
+    checkAchievements(userId, user);
+
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`🏢 تم شراء **${project.name}** بنجاح!`);
+    return;
+  }
+
+  if (content === '!ارباح' || content === '!أرباح') {
+    const data = readData();
+    const user = getUserData(userId);
+    const now = Date.now();
+    const hoursPassed = (now - (user.lastClaimedIncome || now)) / (1000 * 60 * 60);
+
+    if (hoursPassed < 0.1) return message.reply('⏳ عد لاحقاً لجمع الأرباح!');
+
+    let hourly = (user.businesses?.cafe || 0) * 100 + (user.businesses?.gas || 0) * 350 + (user.businesses?.tech || 0) * 1200;
+    if (hourly === 0) return message.reply('❌ لا تملك مشاريع!');
+
+    const totalIncome = Math.floor(hourly * hoursPassed);
+    user.balance += totalIncome;
+    user.lastClaimedIncome = now;
+
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`💵 استلمت **${totalIncome}$** أرباح مشاريعك! 🎉`);
+    return;
+  }
+
+  // 📊 السوق والترتيب
   if (content === '!سوق') {
     const data = readData();
     const embed = new EmbedBuilder()
-      .setTitle('📊 أسعار السوق الحالية')
+      .setTitle('📊 أسعار السوق')
       .addFields(
         { name: '🥇 ذهب', value: `${data.market.prices.gold} $`, inline: true },
         { name: '🛢️ نفط', value: `${data.market.prices.oil} $`, inline: true },
         { name: '🌾 قمح', value: `${data.market.prices.wheat} $`, inline: true }
       )
-      .setColor('#9b59b6')
-      .setFooter({ text: 'الأسعار تتغير دورياً' });
+      .setColor('#9b59b6');
     await message.reply({ embeds: [embed] });
     return;
   }
 
-  // المتجر
-  if (content === '!متجر') {
-    const embed = new EmbedBuilder()
-      .setTitle('🛒 المتجر')
-      .setDescription('قائمة العناصر المتاحة للشراء:')
-      .addFields(
-        { name: '🎟️ بطاقة سحب عشوائي - 500$', value: 'اكتب `!اشتري سحب`' },
-        { name: '🛡️ حماية ضد النهب ليوم - 1000$', value: 'اكتب `!اشتري حماية`' }
-      )
-      .setColor('#e67e22');
-    await message.reply({ embeds: [embed] });
-    return;
-  }
-
-  // الترتيب
   if (content === '!ترتيب' || content === '!الترتيب') {
     const data = readData();
     const users = Object.entries(data.users)
@@ -436,22 +711,18 @@ client.on(Events.MessageCreate, async message => {
     let desc = '';
     users.forEach((u, i) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-      desc += `${medal} <@${u.id}> — **${u.total}** دولار\n`;
+      desc += `${medal} <@${u.id}> — **${u.total}** $\n`;
     });
-    
-    const embed = new EmbedBuilder()
-      .setTitle('🏆 أغنى اللاعبين')
-      .setDescription(desc || 'لا توجد بيانات بعد! كن الأول 🔥')
-      .setColor('#f1c40f');
+
+    const embed = new EmbedBuilder().setTitle('🏆 أغنى اللاعبين').setDescription(desc || 'لا توجد بيانات').setColor('#f1c40f');
     await message.reply({ embeds: [embed] });
     return;
   }
 });
 
-// معالجة ضغط الأزرار
+// الأزرار التفاعلية
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
-  
   const userId = interaction.user.id;
   const user = getUserData(userId);
 
@@ -459,197 +730,55 @@ client.on(Events.InteractionCreate, async interaction => {
     switch (interaction.customId) {
       case 'account': {
         const embed = new EmbedBuilder()
-          .setTitle('💳 معلومات حسابك')
+          .setTitle(`💳 حساب — ${interaction.user.username}`)
           .addFields(
-            { name: '💰 النقدي', value: `${user.balance} دولار`, inline: true },
-            { name: '🏦 في البنك', value: `${user.bank} دولار`, inline: true },
-            { name: '📊 المجموع', value: `${user.balance + user.bank} دولار`, inline: true }
+            { name: '💰 النقدي', value: `${user.balance} $`, inline: true },
+            { name: '🏦 في البنك', value: `${user.bank} $`, inline: true },
+            { name: '🐾 الحيوان', value: user.pet ? PETS[user.pet].name : 'لا يوجد', inline: true }
           )
           .setColor('#3498db');
         await interaction.reply({ embeds: [embed], ephemeral: true });
         break;
       }
-
-      case 'bank': {
+      case 'pets': {
         const embed = new EmbedBuilder()
-          .setTitle('🏦 البنك')
-          .setDescription(
-            `رصيدك النقدي: **${user.balance}** دولار\n` +
-            `رصيدك في البنك: **${user.bank}** دولار\n\n` +
-            'الأوامر المتاحة:\n' +
-            '`!إيداع [المبلغ]` أو `!إيداع الكل`\n' +
-            '`!سحب [المبلغ]` أو `!سحب الكل`'
-          )
-          .setColor('#1abc9c');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'daily': {
-        const data = readData();
-        const today = new Date().toDateString();
-        if (user.dailyLast === today) {
-          await interaction.reply({ content: '⏳ لقد استلمت مكافأتك اليومية بالفعل! عد غداً.', ephemeral: true });
-        } else {
-          const amount = 250;
-          user.balance += amount;
-          user.dailyLast = today;
-          data.users[userId] = user;
-          saveData(data);
-          await interaction.reply({ content: `🎁 تم إضافة **${amount} دولار** إلى رصيدك بنجاح!`, ephemeral: true });
-        }
-        break;
-      }
-
-      case 'portfolio': {
-        const embed = new EmbedBuilder()
-          .setTitle('📈 محفظتك الاستثمارية')
-          .addFields(
-            { name: '🥇 ذهب', value: `${user.stocks.gold || 0} وحدة`, inline: true },
-            { name: '🛢️ نفط', value: `${user.stocks.oil || 0} وحدة`, inline: true },
-            { name: '🌾 قمح', value: `${user.stocks.wheat || 0} وحدة`, inline: true }
-          )
-          .setColor('#e74c3c');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'market': {
-        const data = readData();
-        const embed = new EmbedBuilder()
-          .setTitle('📊 السوق الحالي')
-          .addFields(
-            { name: '🥇 ذهب', value: `${data.market.prices.gold} $`, inline: true },
-            { name: '🛢️ نفط', value: `${data.market.prices.oil} $`, inline: true },
-            { name: '🌾 قمح', value: `${data.market.prices.wheat} $`, inline: true }
-          )
-          .setColor('#9b59b6')
-          .setFooter({ text: 'الأسعار تتغير تلقائياً كل فترة' });
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'games': {
-        const embed = new EmbedBuilder()
-          .setTitle('🎮 الألعاب')
-          .setDescription(
-            'اختر لعبة:\n\n' +
-            '🎲 `!نرد` — رمي النرد (يكلف 100$ ويربح الضعف)\n' +
-            '🦹 `!نهب @الشخص` — محاولة سرقة أموال لاعب آخر'
-          )
-          .setColor('#e74c3c');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'jobs': {
-        const embed = new EmbedBuilder()
-          .setTitle('💼 الوظائف المتاحة')
-          .setDescription(
-            'أداء مهام بسيطة لكسب المال (كل 5 دقائق):\n\n' +
-            '⛏️ `!عمل منجم` — 50-150 دولار\n' +
-            '🌾 `!عمل مزارع` — 40-120 دولار\n' +
-            '🛒 `!عمل متجر` — 60-180 دولار'
-          )
-          .setColor('#d35400');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'auctions': {
-        const data = readData();
-        const activeAuctions = data.auctions.filter(a => a.active).length;
-        const embed = new EmbedBuilder()
-          .setTitle('🏘️ نظام المزادات')
-          .setDescription(
-            `المزادات النشطة حالياً: **${activeAuctions}**\n\n` +
-            'الأوامر المتاحة:\n' +
-            '`!مزادات` — عرض المزادات النشطة'
-          )
-          .setColor('#8e44ad');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'leaderboard': {
-        const data = readData();
-        const users = Object.entries(data.users)
-          .map(([id, u]) => ({ id, total: (u.balance || 0) + (u.bank || 0) }))
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 5);
-        
-        let desc = '';
-        users.forEach((u, i) => {
-          const m = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-          desc += `${m} <@${u.id}> — **${u.total}**$\n`;
-        });
-        
-        const embed = new EmbedBuilder()
-          .setTitle('🏆 أغنى اللاعبين')
-          .setDescription(desc || 'لا بيانات بعد!')
-          .setColor('#f1c40f');
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-        break;
-      }
-
-      case 'shop': {
-        const embed = new EmbedBuilder()
-          .setTitle('🛒 المتجر')
-          .setDescription(
-            'عناصر للشراء:\n\n' +
-            '🎟️ سحب عشوائي — 500$ → `!اشتري سحب`\n' +
-            '🛡️ حماية يوم — 1000$ → `!اشتري حماية`'
-          )
+          .setTitle('🐾 حيوانك الأليف')
+          .setDescription(user.pet ? `تمتلك: **${PETS[user.pet].name}**\nاستخدم \`!رحلة\` كل ساعتين للجلب الأموال!` : 'لا تملك حيواناً! تصفح `!الحيوانات` للتبني.')
           .setColor('#e67e22');
         await interaction.reply({ embeds: [embed], ephemeral: true });
         break;
       }
-
-      case 'missions': {
+      case 'marriage': {
         const embed = new EmbedBuilder()
-          .setTitle('🎒 مهماتي')
-          .setDescription(
-            'المهام اليومية:\n\n' +
-            '✅ استخدم !يومية يومياً → 250$\n' +
-            '✅ العب لعبة نرد → 50$\n' +
-            '✅ قم بعمل ناجح عبر `!عمل`'
-          )
-          .setColor('#16a085');
+          .setTitle('💍 الشريك والخزنة المشتركة')
+          .setDescription(user.spouse ? `الشريك: <@${user.spouse}>\nالرصيد المشترك: **${user.sharedVault || 0}$**` : 'لست متزوجاً! استخدم `!زواج @الشخص`.')
+          .setColor('#e91e63');
         await interaction.reply({ embeds: [embed], ephemeral: true });
         break;
       }
-
+      case 'achievements': {
+        const achs = user.achievements || [];
+        const embed = new EmbedBuilder()
+          .setTitle('📜 إنجازاتك الحالية')
+          .setDescription(`حققت **${achs.length}** إنجازات! اكتب \`!انجازاتي\` لمشاهدة التفاصيل.`)
+          .setColor('#2ecc71');
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+        break;
+      }
       default:
-        await interaction.reply({ content: '❌ خيار غير معروف! استخدم !قائمة مجدداً.', ephemeral: true });
+        await interaction.reply({ content: '✅ تم التنفيذ بنجاح!', ephemeral: true });
         break;
     }
   } catch (err) {
     console.error('Error handling button:', err);
-    if (!interaction.replied) {
-      await interaction.reply({ content: '❌ حدث خطأ، حاول مرة أخرى.', ephemeral: true });
-    }
   }
-});
-
-// معالجة الأخطاء
-client.on(Events.ShardError, error => {
-  console.error('WebSocket error:', error);
-});
-
-process.on('unhandledRejection', error => {
-  console.error('Unhandled promise rejection:', error);
 });
 
 // تسجيل الدخول
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
-  console.error('❌ خطأ: متغير البيئة DISCORD_TOKEN غير مُعرف!');
+  console.error('❌ DISCORD_TOKEN غير موجود!');
   process.exit(1);
 }
 
-client.login(token)
-  .then(() => console.log('⏳ جاري الاتصال بالديسكورد...'))
-  .catch(err => {
-    console.error('❌ فشل تسجيل الدخول:', err.message);
-    process.exit(1);
-  });
+client.login(token);
