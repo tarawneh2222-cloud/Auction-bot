@@ -54,7 +54,9 @@ let data = {
   stocks: {},
   transactions: [],
   challenges: {},
-  achievements: {}
+  achievements: {},
+  cooperations: {},
+  friends: {}
 };
 
 // === الشركات والأسهم الافتراضية ===
@@ -73,7 +75,8 @@ const DEFAULT_CHALLENGES = {
   daily: [
     { id: 'trade1', name: 'متداول نشط', desc: 'أكمل صفقة شراء أو بيع واحدة', target: 1, reward: 30, type: 'trades' },
     { id: 'save1', name: 'مدخر ذكي', desc: 'أودع 100 دينار في البنك', target: 100, reward: 20, type: 'deposit' },
-    { id: 'play1', name: 'محب الألعاب', desc: 'العب لعبة واحدة', target: 1, reward: 15, type: 'games' }
+    { id: 'play1', name: 'محب الألعاب', desc: 'العب لعبة واحدة', target: 1, reward: 15, type: 'games' },
+    { id: 'friend1', name: 'شريك ناجح', desc: 'أكمل مهمة تعاونية مع صديق', target: 1, reward: 50, type: 'coop' }
   ],
   weekly: [
     { id: 'profit1', name: 'مستثمر ناجح', desc: 'حقق ربحاً من الأسهم', target: 500, reward: 200, type: 'profit' },
@@ -88,7 +91,9 @@ const ACHIEVEMENTS_LIST = {
   rich10000: { name: 'ثري جداً', desc: 'امتلك 10,000 دينار', icon: '👑', reward: 500 },
   investor: { name: 'مستثمر محترف', desc: 'امتلك أسهماً في 3 شركات مختلفة', icon: '📊', reward: 150 },
   trader10: { name: 'متداول نشط', desc: 'أكمل 10 صفقات', icon: '📈', reward: 100 },
-  winner5: { name: 'محظوظ', desc: 'اربح 5 مرات في الألعاب', icon: '🏆', reward: 80 }
+  winner5: { name: 'محظوظ', desc: 'اربح 5 مرات في الألعاب', icon: '🏆', reward: 80 },
+  firstCoop: { name: 'يد بيد', desc: 'أكمل أول مهمة تعاونية', icon: '🤝', reward: 75 },
+  friends5: { name: 'صديق وفي', desc: 'أضف 5 أصدقاء', icon: '💛', reward: 100 }
 };
 
 function loadData() {
@@ -101,6 +106,8 @@ function loadData() {
       data.transactions = saved.transactions || [];
       data.challenges = saved.challenges || { daily: {}, weekly: {}, resetDate: Date.now() };
       data.achievements = saved.achievements || {};
+      data.cooperations = saved.cooperations || {};
+      data.friends = saved.friends || {};
       console.log('✅ تم تحميل البيانات بنجاح');
     } else {
       data = { 
@@ -109,7 +116,9 @@ function loadData() {
         stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
         transactions: [],
         challenges: { daily: {}, weekly: {}, resetDate: Date.now() },
-        achievements: {}
+        achievements: {},
+        cooperations: {},
+        friends: {}
       };
       saveData();
       console.log('📄 تم إنشاء ملف بيانات جديد');
@@ -122,7 +131,9 @@ function loadData() {
       stocks: JSON.parse(JSON.stringify(DEFAULT_STOCKS)),
       transactions: [],
       challenges: { daily: {}, weekly: {}, resetDate: Date.now() },
-      achievements: {}
+      achievements: {},
+      cooperations: {},
+      friends: {}
     };
   }
 }
@@ -141,7 +152,7 @@ function ensureUser(userId) {
       balance: 1000,
       bank: 0,
       portfolio: {},
-      stats: { trades: 0, games: 0, gamesWon: 0, deposit: 0, totalProfit: 0 },
+      stats: { trades: 0, games: 0, gamesWon: 0, deposit: 0, totalProfit: 0, coopTasks: 0 },
       lastDaily: 0,
       lastWork: 0,
       lastRob: 0,
@@ -154,12 +165,69 @@ function ensureUser(userId) {
   }
   if (!data.users[userId].portfolio) data.users[userId].portfolio = {};
   if (!data.users[userId].stats) {
-    data.users[userId].stats = { trades: 0, games: 0, gamesWon: 0, deposit: 0, totalProfit: 0 };
+    data.users[userId].stats = { trades: 0, games: 0, gamesWon: 0, deposit: 0, totalProfit: 0, coopTasks: 0 };
   }
   if (!data.users[userId].unlockedAchievements) {
     data.users[userId].unlockedAchievements = [];
   }
   return data.users[userId];
+}
+
+// ========== نظام الأصدقاء والتعاون ==========
+function addFriend(user1Id, user2Id) {
+  if (!data.friends[user1Id]) data.friends[user1Id] = [];
+  if (!data.friends[user2Id]) data.friends[user2Id] = [];
+  
+  if (!data.friends[user1Id].includes(user2Id)) {
+    data.friends[user1Id].push(user2Id);
+  }
+  if (!data.friends[user2Id].includes(user1Id)) {
+    data.friends[user2Id].push(user1Id);
+  }
+  saveData();
+}
+
+function areFriends(user1Id, user2Id) {
+  return data.friends[user1Id]?.includes(user2Id) || false;
+}
+
+function createCoopTask(creatorId, partnerId, taskName, reward) {
+  const taskId = Date.now().toString();
+  data.cooperations[taskId] = {
+    id: taskId,
+    creator: creatorId,
+    partner: partnerId,
+    name: taskName,
+    reward: reward,
+    creatorReady: false,
+    partnerReady: false,
+    completed: false,
+    createdAt: Date.now()
+  };
+  saveData();
+  return taskId;
+}
+
+function completeCoopTask(taskId) {
+  const task = data.cooperations[taskId];
+  if (!task || task.completed) return false;
+  
+  task.completed = true;
+  const user1 = ensureUser(task.creator);
+  const user2 = ensureUser(task.partner);
+  
+  user1.balance += task.reward;
+  user2.balance += task.reward;
+  user1.stats.coopTasks++;
+  user2.stats.coopTasks++;
+  
+  data.challenges.daily.friend1 = (data.challenges.daily.friend1 || 0) + 1;
+  
+  if (user1.stats.coopTasks === 1) unlockAchievement(task.creator, 'firstCoop');
+  if (user2.stats.coopTasks === 1) unlockAchievement(task.partner, 'firstCoop');
+  
+  saveData();
+  return true;
 }
 
 function recordTransaction(type, symbol, amount, price, userId) {
@@ -185,7 +253,7 @@ function updateStockPrices() {
   saveData();
 }
 
-setInterval(updateStockPrices, 5 * 60 * 1000); // كل 5 دقائق
+setInterval(updateStockPrices, 5 * 60 * 1000);
 
 // ========== نظام التحديات والإنجازات ==========
 function resetChallengesIfNeeded() {
@@ -203,29 +271,26 @@ function checkAchievements(userId) {
   const user = ensureUser(userId);
   const netWorth = user.balance + user.bank + calculatePortfolioValue(userId);
   
-  // أول صفقة
   if (user.stats.trades >= 1 && !user.unlockedAchievements.includes('firstTrade')) {
     unlockAchievement(userId, 'firstTrade');
   }
-  // 1000 دينار
   if (netWorth >= 1000 && !user.unlockedAchievements.includes('rich1000')) {
     unlockAchievement(userId, 'rich1000');
   }
-  // 10,000 دينار
   if (netWorth >= 10000 && !user.unlockedAchievements.includes('rich10000')) {
     unlockAchievement(userId, 'rich10000');
   }
-  // 3 شركات مختلفة
   if (Object.keys(user.portfolio).length >= 3 && !user.unlockedAchievements.includes('investor')) {
     unlockAchievement(userId, 'investor');
   }
-  // 10 صفقات
   if (user.stats.trades >= 10 && !user.unlockedAchievements.includes('trader10')) {
     unlockAchievement(userId, 'trader10');
   }
-  // 5 انتصارات
   if (user.stats.gamesWon >= 5 && !user.unlockedAchievements.includes('winner5')) {
     unlockAchievement(userId, 'winner5');
+  }
+  if (data.friends[userId]?.length >= 5 && !user.unlockedAchievements.includes('friends5')) {
+    unlockAchievement(userId, 'friends5');
   }
 }
 
@@ -297,10 +362,6 @@ async function drawLottery() {
 setInterval(drawLottery, LOTTERY_DRAW_TIME);
 
 // ========== القائمة الرئيسية ==========
-if (['!قائمة', '!الرئيسية', '!بداية'].includes(cmd)) {
-    await sendMainMenu(message.channel);
-    return;
-  }
 async function sendMainMenu(channel) {
   resetChallengesIfNeeded();
   const embed = new EmbedBuilder()
@@ -314,17 +375,21 @@ async function sendMainMenu(channel) {
     new ButtonBuilder().setCustomId('stocks').setLabel('سوق الأسهم').setStyle(ButtonStyle.Primary).setEmoji('📈')
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('challenges').setLabel('التحديات').setStyle(ButtonStyle.Success).setEmoji('🎯'),
-    new ButtonBuilder().setCustomId('achievements').setLabel('الإنجازات').setStyle(ButtonStyle.Grey).setEmoji('🏆'),
-    new ButtonBuilder().setCustomId('bank').setLabel('البنك').setStyle(ButtonStyle.Secondary).setEmoji('🏛️')
+    new ButtonBuilder().setCustomId('friends').setLabel('الأصدقاء').setStyle(ButtonStyle.Success).setEmoji('🤝'),
+    new ButtonBuilder().setCustomId('coop').setLabel('التعاون').setStyle(ButtonStyle.Primary).setEmoji('👥'),
+    new ButtonBuilder().setCustomId('challenges').setLabel('التحديات').setStyle(ButtonStyle.Secondary).setEmoji('🎯')
   );
   const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('achievements').setLabel('الإنجازات').setStyle(ButtonStyle.Secondary).setEmoji('🏆'),
+    new ButtonBuilder().setCustomId('bank').setLabel('البنك').setStyle(ButtonStyle.Secondary).setEmoji('🏛️'),
+    new ButtonBuilder().setCustomId('games').setLabel('الألعاب').setStyle(ButtonStyle.Danger).setEmoji('🎮')
+  );
+  const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('daily').setLabel('يومي').setStyle(ButtonStyle.Success).setEmoji('🎁'),
-    new ButtonBuilder().setCustomId('games').setLabel('الألعاب').setStyle(ButtonStyle.Danger).setEmoji('🎮'),
     new ButtonBuilder().setCustomId('help').setLabel('المساعدة').setStyle(ButtonStyle.Secondary).setEmoji('❓')
   );
 
-  await channel.send({ embeds: [embed], components: [row1, row2, row3] });
+  await channel.send({ embeds: [embed], components: [row1, row2, row3, row4] });
 }
 
 // ========== معالجة الأزرار ==========
@@ -348,6 +413,7 @@ client.on(Events.InteractionCreate, async interaction => {
             { name: '📈 الأسهم', value: `${portfolioVal.toFixed(0)} دينار`, inline: true },
             { name: '💎 إجمالي الأصول', value: `${totalAssets.toFixed(0)} دينار`, inline: true },
             { name: '📊 الصفقات', value: `${user.stats.trades} عملية`, inline: true },
+            { name: '🤝 مهام تعاونية', value: `${user.stats.coopTasks} مهمة`, inline: true },
             { name: '🏆 الإنجازات', value: `${user.unlockedAchievements.length}/${Object.keys(ACHIEVEMENTS_LIST).length}`, inline: true }
           );
         await interaction.reply({ embeds: [embed], ephemeral: false });
@@ -393,6 +459,45 @@ client.on(Events.InteractionCreate, async interaction => {
           .setTitle('📊 سوق الأسهم')
           .setDescription(desc)
           .setFooter({ text: 'تحديث كل 5 دقائق' });
+        await interaction.reply({ embeds: [embed], ephemeral: false });
+        break;
+      }
+
+      case 'friends': {
+        let desc = '🤝 **قائمة أصدقائك:**\n\n';
+        const friends = data.friends[userId] || [];
+        if (friends.length === 0) {
+          desc += 'ليس لديك أصدقاء حتى الآن 😔\nأضف أصدقاءك باستخدام الأمر: `!أضف @الصديق`\n\n💡 يمكنك إرسال هدايا وإنشاء مهام تعاونية معهم!';
+        } else {
+          friends.forEach(fid => {
+            desc += `✅ <@${fid}>\n`;
+          });
+          desc += `\n📊 إجمالي الأصدقاء: ${friends.length}`;
+        }
+        desc += '\n━━━━━━━━━━━━━━━\n`!أضف @الشخص` — إضافة صديق\n`!أصدقائي` — عرض القائمة\n`!هدية @الصديق المبلغ` — إرسال هدية';
+        
+        const embed = new EmbedBuilder()
+          .setColor('#f1c40f')
+          .setTitle('🤝 الأصدقاء')
+          .setDescription(desc);
+        await interaction.reply({ embeds: [embed], ephemeral: false });
+        break;
+      }
+
+      case 'coop': {
+        let desc = '👥 **نظام التعاون والمهام المشتركة:**\n\n';
+        desc += '🎯 أنشئ مهمة مشتركة مع صديقك واكسبا معاً مكافآت أكبر!\n\n';
+        desc += '📋 الأوامر المتاحة:\n';
+        desc += '`!مهمة @الصديق اسم المهمة المكافأة` — إنشاء مهمة مشتركة\n';
+        desc += '`مهامي` — عرض مهامك الحالية\n';
+        desc += '`أوافق المهمة` — الموافقة على مهمة\n';
+        desc += '`أكمل المهمة` — إنهاء المهمة معاً\n\n';
+        desc += '💡 المهمة تكتمل عندما يوافق الطرفان عليها، وتُضاف المكافأة لكليكما في نفس الوقت! 🎉';
+        
+        const embed = new EmbedBuilder()
+          .setColor('#9b59b6')
+          .setTitle('👥 التعاون المشترك')
+          .setDescription(desc);
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
@@ -494,6 +599,7 @@ client.on(Events.InteractionCreate, async interaction => {
           .setTitle('📖 دليل الأوامر الكامل')
           .addFields(
             { name: '📊 الأسهم والتداول', value: '`!سوق` — عرض الأسعار\n`!شراء رمز الكمية` — شراء أسهم\n`!بيع رمز الكمية` — بيع أسهم\n`!محفظة` — عرض محفظتك', inline: false },
+            { name: '🤝 الأصدقاء والتعاون', value: '`!أضف @الشخص` — إضافة صديق\n`!أصدقائي` — عرض قائمة الأصدقاء\n`!هدية @الصديق المبلغ` — إرسال هدية مالية\n`!مهمة @الصديق اسم المكافأة` — إنشاء مهمة مشتركة\n`!مهامي` — عرض مهامك\n`!أوافق رقم المهمة` — الموافقة\n`!أكمل رقم المهمة` — إنهاء المهمة', inline: false },
             { name: '🏦 المالية', value: '`!إيداع مبلغ` — إيداع في البنك\n`!سحب مبلغ` — سحب من البنك\n`!حساب` — عرض حسابك', inline: false },
             { name: '🎁 يومي', value: '`!يومي` — مكافأة يومية\n`!عمل` — العمل كل 5 دقائق', inline: false },
             { name: '🎫 اليانصيب', value: '`!تذكرة` — شراء تذكرة يانصيب', inline: false },
@@ -528,6 +634,184 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
+  // ========== 🤝 نظام الأصدقاء والتعاون ==========
+  
+  // === إضافة صديق ===
+  if (cmd === '!أضف' || cmd === '!صديق') {
+    const target = message.mentions.users.first();
+    if (!target) {
+      await message.reply('❌ استخدم: `!أضف @الشخص`');
+      return;
+    }
+    if (target.id === userId) {
+      await message.reply('🤔 لا يمكنك إضافة نفسك كصديق!');
+      return;
+    }
+    if (areFriends(userId, target.id)) {
+      await message.reply('✅ هذا الشخص بالفعل صديقك!');
+      return;
+    }
+    addFriend(userId, target.id);
+    checkAchievements(userId);
+    await message.reply(`✅ تمت إضافة **${target.username}** كصديق لك! 🤝`);
+    return;
+  }
+
+  // === عرض الأصدقاء ===
+  if (cmd === '!أصدقائي' || cmd === '!قائمة_الاصدقاء') {
+    const friends = data.friends[userId] || [];
+    if (friends.length === 0) {
+      await message.reply('😔 ليس لديك أصدقاء حتى الآن. استخدم `!أضف @الشخص` لبدء إضافة أصدقائك!');
+      return;
+    }
+    let list = '🤝 **قائمة أصدقائك:**\n\n';
+    friends.forEach(fid => {
+      list += `✅ <@${fid}>\n`;
+    });
+    list += `\n📊 المجموع: **${friends.length} صديق**`;
+    await message.reply(list);
+    return;
+  }
+
+  // === إرسال هدية ===
+  if (cmd === '!هدية' || cmd === '!أرسل') {
+    const target = message.mentions.users.first();
+    const amount = parseInt(args[2]);
+    if (!target || isNaN(amount) || amount <= 0) {
+      await message.reply('❌ استخدم: `!هدية @الصديق 100`');
+      return;
+    }
+    if (amount > user.balance) {
+      await message.reply('❌ رصيدك غير كافٍ لإرسال هذه الهدية');
+      return;
+    }
+    if (!areFriends(userId, target.id)) {
+      await message.reply('⚠️ يجب أن يكون صديقاً أولاً! استخدم `!أضف @الشخص`');
+      return;
+    }
+    user.balance -= amount;
+    ensureUser(target.id).balance += amount;
+    saveData();
+    await message.reply(`🎁 أرسلت **${amount} دينار** كهدية إلى ${target.username}! 🎉`);
+    return;
+  }
+
+  // === إنشاء مهمة تعاونية ===
+  if (cmd === '!مهمة' || cmd === '!مهمة_جديدة') {
+    const target = message.mentions.users.first();
+    const reward = parseInt(args[3]);
+    if (!target || args.length < 3 || isNaN(reward) || reward <= 0) {
+      await message.reply('❌ استخدم: `!مهمة @الصديق اسم المهمة 200`\nمثال: `!مهمة @أحمد تداول معاً 200`');
+      return;
+    }
+    if (target.id === userId) {
+      await message.reply('🤔 لا يمكنك إنشاء مهمة مع نفسك!');
+      return;
+    }
+    if (!areFriends(userId, target.id)) {
+      await message.reply('⚠️ يجب أن يكون صديقاً أولاً! استخدم `!أضف @الشخص`');
+      return;
+    }
+    const taskName = args.slice(2, -1).join(' ');
+    const taskId = createCoopTask(userId, target.id, taskName, reward);
+    await message.reply(
+      `📋 تم إنشاء مهمة تعاونية!\n\n` +
+      `🔢 رقم المهمة: **${taskId}**\n` +
+      `📝 الاسم: **${taskName}**\n` +
+      `👥 الشريك: ${target.username}\n` +
+      `💰 المكافأة لكل واحد: **${reward} دينار**\n\n` +
+      `✅ أطلب من صديقك كتابة: \`!أوافق ${taskId}\` للموافقة\n` +
+      `عندما ينتهيان: كلاهما يكتب: \`!أكمل ${taskId}\``
+    );
+    return;
+  }
+
+  // === عرض مهامي ===
+  if (cmd === '!مهامي' || cmd === '!مهام') {
+    let desc = '👥 **مهامك التعاونية:**\n\n';
+    let hasTasks = false;
+    for (const [tid, task] of Object.entries(data.cooperations)) {
+      if (task.creator === userId || task.partner === userId) {
+        hasTasks = true;
+        const role = task.creator === userId ? 'المنشئ' : 'الشريك';
+        const status = task.completed ? '✅ مكتملة' :
+          (task.creatorReady && task.partnerReady ? '⏳ جاهزة للإكمال' :
+          (task.creatorReady || task.partnerReady ? '⏳ بانتظار الموافقة' : '📩 جديدة'));
+        desc += `🔢 **${tid}** — ${task.name}\n`;
+        desc += `👤 أنت: ${role} | الحالة: ${status}\n`;
+        desc += `💰 المكافأة: ${task.reward} دينار\n\n`;
+      }
+    }
+    if (!hasTasks) {
+      desc += 'ليس لديك أي مهام تعاونية حتى الآن 🤝\nأنشئ مهمة جديدة مع صديقك: `!مهمة @الصديق اسم المكافأة`';
+    }
+    await message.reply(desc);
+    return;
+  }
+
+  // === الموافقة على مهمة ===
+  if (cmd === '!أوافق' || cmd === '!موافق') {
+    const taskId = args[1];
+    if (!taskId || !data.cooperations[taskId]) {
+      await message.reply('❌ رقم المهمة غير صالح. استخدم `!مهامي` لمعرفة أرقام مهامك');
+      return;
+    }
+    const task = data.cooperations[taskId];
+    if (task.completed) {
+      await message.reply('✅ هذه المهمة مكتملة بالفعل!');
+      return;
+    }
+    if (task.creator !== userId && task.partner !== userId) {
+      await message.reply('❌ أنت لست طرفاً في هذه المهمة');
+      return;
+    }
+    if (task.creator === userId) task.creatorReady = true;
+    if (task.partner === userId) task.partnerReady = true;
+    saveData();
+    const bothReady = task.creatorReady && task.partnerReady;
+    await message.reply(
+      bothReady
+        ? `✅ تمت الموافقة من الطرفين! اكتبا معاً: \`!أكمل ${taskId}\` لإنهاء المهمة والحصول على المكافأة 🎉`
+        : `✅ تم تسجيل موافقتك! بانتظار موافقة الشريك... ⏳`
+    );
+    return;
+  }
+
+  // === إكمال مهمة ===
+  if (cmd === '!أكمل' || cmd === '!إنهاء') {
+    const taskId = args[1];
+    if (!taskId || !data.cooperations[taskId]) {
+      await message.reply('❌ رقم المهمة غير صالح');
+      return;
+    }
+    const task = data.cooperations[taskId];
+    if (task.completed) {
+      await message.reply('✅ هذه المهمة مكتملة بالفعل!');
+      return;
+    }
+    if (task.creator !== userId && task.partner !== userId) {
+      await message.reply('❌ أنت لست طرفاً في هذه المهمة');
+      return;
+    }
+    if (!task.creatorReady || !task.partnerReady) {
+      await message.reply('⚠️ يجب أن يوافق الطرفان أولاً على المهمة باستخدام `!أوافق ' + taskId + '`');
+      return;
+    }
+    if (completeCoopTask(taskId)) {
+      await message.reply(
+        `🎉 **تم إنجاز المهمة بنجاح!** 🎊\n\n` +
+        `📝 المهمة: **${task.name}**\n` +
+        `💰 حصل كل منكما على: **${task.reward} دينار** ✅\n\n` +
+        `🤝 عمل رائع معاً! استمرّا في التعاون! 💪`
+      );
+    } else {
+      await message.reply('❌ حدث خطأ أثناء إكمال المهمة');
+    }
+    return;
+  }
+
+  // ========== 📊 نظام الأسهم والتداول ==========
+  
   // === سوق الأسهم ===
   if (cmd === '!سوق' || cmd === '!اسهم') {
     let desc = '📈 أسعار الأسهم الحالية:\n\n';
@@ -535,7 +819,7 @@ client.on(Events.MessageCreate, async message => {
       const arrow = stock.change >= 0 ? '📈' : '📉';
       desc += `${stock.icon} **${sym}** — ${stock.name}\nالسعر: **${stock.price.toFixed(2)} دينار** | ${arrow} ${stock.change >= 0 ? '+' : ''}${stock.change}%\n\n`;
     }
-    desc += '🛒 `!شراء رمز الكمية` | 💰 `!بيع رمز الكمية`';
+    desc += '🛒 `!شراء رمز الكمية` — مثال: `!شراء تك 10`\n💰 `!بيع رمز الكمية` — مثال: `!بيع تك 5`';
     await message.reply(desc);
     return;
   }
@@ -621,7 +905,9 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // === البنك: إيداع ===
+  // ========== 🏦 البنك والمالية ==========
+  
+  // === إيداع ===
   if (cmd === '!إيداع' || cmd === '!ايداع') {
     const amount = parseInt(args[1]);
     if (isNaN(amount) || amount <= 0 || amount > user.balance) {
@@ -634,277 +920,4 @@ client.on(Events.MessageCreate, async message => {
     data.challenges.daily.save1 = (data.challenges.daily.save1 || 0) + amount;
     checkAchievements(userId);
     saveData();
-    await message.reply(`✅ تم إيداع **${amount} دينار** في البنك 🏦`);
-    return;
-  }
-
-  // === البنك: سحب ===
-  if (cmd === '!سحب') {
-    const amount = parseInt(args[1]);
-    if (isNaN(amount) || amount <= 0 || amount > user.bank) {
-      await message.reply('❌ استخدم: `!سحب 100`');
-      return;
-    }
-    user.bank -= amount;
-    user.balance += amount;
-    saveData();
-    await message.reply(`✅ تم سحب **${amount} دينار** 💳`);
-    return;
-  }
-
-  // === حسابي ===
-  if (cmd === '!حساب' || cmd === '!رصيد') {
-    const portfolioVal = calculatePortfolioValue(userId);
-    const total = user.balance + user.bank + portfolioVal;
-    await message.reply(
-      `💳 حسابك:\n` +
-      `💰 نقدي: ${user.balance} دينار\n` +
-      `🏦 بالبنك: ${user.bank} دينار\n` +
-      `📈 أسهم: ${portfolioVal.toFixed(0)} دينار\n` +
-      `💎 الإجمالي: ${total.toFixed(0)} دينار`
-    );
-    return;
-  }
-
-  // === يومي ===
-  if (cmd === '!يومي' || cmd === '!مكافأة') {
-    if (now - user.lastDaily >= DAILY_COOLDOWN) {
-      user.streak = user.lastDaily && now - user.lastDaily < DAILY_COOLDOWN + 6 * 60 * 60 * 1000 
-        ? (user.streak || 0) + 1 : 1;
-      const bonus = Math.floor(DAILY_AMOUNT * (1 + Math.min(user.streak * 0.1, 0.5)));
-      user.lastDaily = now;
-      user.balance += bonus;
-      checkAchievements(userId);
-      saveData();
-      await message.reply(`✅ حصلت على **${bonus} دينار**!\n🔥 سلسلتك: **${user.streak} يوم متتالي** 🎉`);
-    } else {
-      const h = Math.floor((DAILY_COOLDOWN - (now - user.lastDaily)) / 3600000);
-      const m = Math.floor(((DAILY_COOLDOWN - (now - user.lastDaily)) % 3600000) / 60000);
-      await message.reply(`⏳ عود بعد **${h} ساعة و ${m} دقيقة**`);
-    }
-    return;
-  }
-
-  // === عمل ===
-  if (cmd === '!عمل' || cmd === '!وظيفة') {
-    if (now - user.lastWork >= WORK_COOLDOWN) {
-      const amount = Math.floor(Math.random() * (WORK_MAX - WORK_MIN + 1)) + WORK_MIN;
-      user.lastWork = now;
-      user.balance += amount;
-      saveData();
-      await message.reply(`✅ انتهيت من العمل وحصلت على **${amount} دينار** 💪`);
-    } else {
-      const m = Math.ceil((WORK_COOLDOWN - (now - user.lastWork)) / 60000);
-      await message.reply(`⏳ استرح قليلاً — يمكنك العمل بعد **${m} دقيقة**`);
-    }
-    return;
-  }
-
-  // === يانصيب ===
-  if (cmd === '!تذكرة' || cmd === '!يانصيب') {
-    initLottery();
-    if (user.balance < LOTTERY_TICKET_PRICE) {
-      await message.reply(`❌ تحتاج إلى ${LOTTERY_TICKET_PRICE} دينار`);
-      return;
-    }
-    user.balance -= LOTTERY_TICKET_PRICE;
-    data.lotteries.current.pot += LOTTERY_TICKET_PRICE;
-    if (!data.lotteries.current.participants.includes(userId)) {
-      data.lotteries.current.participants.push(userId);
-    }
-    user.lotteryTickets = (user.lotteryTickets || 0) + 1;
-    const timeLeft = Math.ceil((LOTTERY_DRAW_TIME - (now - data.lotteries.current.createdAt)) / 60000);
-    saveData();
-    await message.reply(
-      `✅ تم شراء التذكرة! 🎫\n` +
-      `💰 الجائزة: ${data.lotteries.current.pot} دينار\n` +
-      `👥 المشاركون: ${data.lotteries.current.participants.length}\n` +
-      `⏳ السحب بعد: ${Math.max(0, timeLeft)} دقيقة`
-    );
-    return;
-  }
-
-  // === التحديات ===
-  if (cmd === '!تحديات') {
-    let desc = '🎯 تحدياتك اليومية:\n\n';
-    for (const ch of DEFAULT_CHALLENGES.daily) {
-      const progress = data.challenges.daily[ch.id] || 0;
-      const done = progress >= ch.target;
-      desc += `${done ? '✅' : '⬜'} **${ch.name}** — ${ch.desc}\nالمكافأة: ${ch.reward} دينار\n`;
-      if (done && !data.challenges.daily[ch.id + '_claimed']) {
-        user.balance += ch.reward;
-        data.challenges.daily[ch.id + '_claimed'] = true;
-        desc += `🎉 تمت إضافة المكافأة!\n`;
-      }
-      desc += '\n';
-    }
-    saveData();
-    await message.reply(desc);
-    return;
-  }
-
-  // === الإنجازات ===
-  if (cmd === '!إنجازات') {
-    let desc = '🏆 إنجازاتك:\n\n';
-    for (const [id, ach] of Object.entries(ACHIEVEMENTS_LIST)) {
-      const unlocked = user.unlockedAchievements.includes(id);
-      desc += `${unlocked ? '✅' : '⬜'} ${ach.icon} **${ach.name}** — ${ach.desc}\n`;
-    }
-    await message.reply(desc);
-    return;
-  }
-
-  // === الألعاب ===
-  if (cmd === '!نرد') {
-    const amount = parseInt(args[1]);
-    if (isNaN(amount) || amount <= 0 || amount > user.balance) {
-      await message.reply('❌ استخدم: `!نرد 50`');
-      return;
-    }
-    const u = Math.floor(Math.random() * 6) + 1;
-    const b = Math.floor(Math.random() * 6) + 1;
-    if (u > b) {
-      user.balance += amount;
-      user.stats.gamesWon++;
-      await message.reply(`✅ فزت! 🎲 أنت:${u} أنا:${b} +${amount}`);
-    } else if (u < b) {
-      user.balance -= amount;
-      await message.reply(`❌ خسرت 🎲 أنت:${u} أنا:${b} -${amount}`);
-    } else {
-      await message.reply(`⚖️ تعادل 🎲`);
-    }
-    user.stats.games++;
-    data.challenges.daily.play1 = (data.challenges.daily.play1 || 0) + 1;
-    checkAchievements(userId);
-    saveData();
-    return;
-  }
-
-  if (cmd === '!حجر' || cmd === '!ورق' || cmd === '!مقص') {
-    const choice = cmd.slice(1);
-    const amount = parseInt(args[1]);
-    const opts = ['حجر', 'ورق', 'مقص'];
-    const bot = opts[Math.floor(Math.random() * 3)];
-    if (isNaN(amount) || amount <= 0 || amount > user.balance) {
-      await message.reply('❌ استخدم: `!حجر 50`');
-      return;
-    }
-    let res;
-    if (choice === bot) res = `⚖️ تعادل! كلانا اختار ${bot}`;
-    else if (
-      (choice === 'حجر' && bot === 'مقص') ||
-      (choice === 'ورق' && bot === 'حجر') ||
-      (choice === 'مقص' && bot === 'ورق')
-    ) {
-      user.balance += amount;
-      user.stats.gamesWon++;
-      res = `✅ فزت! أنت:${choice} أنا:${bot} +${amount}`;
-    } else {
-      user.balance -= amount;
-      res = `❌ خسرت! أنت:${choice} أنا:${bot} -${amount}`;
-    }
-    user.stats.games++;
-    data.challenges.daily.play1 = (data.challenges.daily.play1 || 0) + 1;
-    checkAchievements(userId);
-    saveData();
-    await message.reply(res);
-    return;
-  }
-
-  if (cmd === '!عملة') {
-    const amount = parseInt(args[1]);
-    const pick = (args[2] || '').toLowerCase();
-    if (!['وجه', 'خلف'].includes(pick) || isNaN(amount) || amount <= 0 || amount > user.balance) {
-      await message.reply('❌ استخدم: `!عملة 50 وجه`');
-      return;
-    }
-    const res = Math.random() < 0.5 ? 'وجه' : 'خلف';
-    if (pick === res) {
-      user.balance += amount;
-      user.stats.gamesWon++;
-      await message.reply(`🪙 ${res} — ✅ فزت! +${amount}`);
-    } else {
-      user.balance -= amount;
-      await message.reply(`🪙 ${res} — ❌ خسرت! -${amount}`);
-    }
-    user.stats.games++;
-    data.challenges.daily.play1 = (data.challenges.daily.play1 || 0) + 1;
-    checkAchievements(userId);
-    saveData();
-    return;
-  }
-
-  if (cmd === '!صيد') {
-    const fish = [
-      { e: '🐟', n: 'سمكة صغيرة', v: Math.floor(Math.random() * 15) + 5 },
-      { e: '🐠', n: 'سمكة كبيرة', v: Math.floor(Math.random() * 30) + 20 },
-      { e: '🐡', n: 'سمكة ذهبية', v: Math.floor(Math.random() * 50) + 40 },
-      { e: '🌊', n: 'لا شيء', v: 0 }
-    ];
-    const f = fish[Math.floor(Math.random() * fish.length)];
-    if (f.v > 0) user.balance += f.v;
-    await message.reply(f.v > 0 ? `${f.e} اصطدت ${f.n}! +${f.v} دينار` : `${f.e} لم تصطد شيئاً 😅`);
-    user.stats.games++;
-    data.challenges.daily.play1 = (data.challenges.daily.play1 || 0) + 1;
-    checkAchievements(userId);
-    saveData();
-    return;
-  }
-
-  if (cmd === '!تنقيب') {
-    const items = [
-      { e: '🥇', n: 'ذهب', v: Math.floor(Math.random() * 60) + 50 },
-      { e: '💎', n: 'ألماس', v: Math.floor(Math.random() * 100) + 80 },
-      { e: '🪙', n: 'عملات قديمة', v: Math.floor(Math.random() * 20) + 10 },
-      { e: '🪨', n: 'حجارة', v: 0 }
-    ];
-    const found = items[Math.floor(Math.random() * items.length)];
-    if (found.v > 0) user.balance += found.v;
-    await message.reply(found.v > 0 ? `${found.e} وجدت ${found.n}! +${found.v} دينار 🎉` : `${found.e} لم تجد شيئاً 😅`);
-    user.stats.games++;
-    data.challenges.daily.play1 = (data.challenges.daily.play1 || 0) + 1;
-    checkAchievements(userId);
-    saveData();
-    return;
-  }
-
-  // === إداري ===
-  if ((cmd === '!تعويض' || cmd === '!أعط') && ADMIN_IDS.includes(userId)) {
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[2]);
-    if (!target || isNaN(amount) || amount <= 0) {
-      await message.reply('❌ استخدم: `!تعويض @الشخص 100`');
-      return;
-    }
-    ensureUser(target.id).balance = Math.min(MAX_MONEY, ensureUser(target.id).balance + amount);
-    saveData();
-    await message.reply(`✅ تم إضافة ${amount} دينار لـ ${target.username}`);
-    return;
-  }
-});
-
-// ========== تشغيل البوت ==========
-client.once(Events.ClientReady, () => {
-  console.log(`✅ البوت جاهز: ${client.user.tag}`);
-  initLottery();
-  checkAchievements('init');
-  console.log('📊 نظام الأسهم والتداول جاهز');
-  console.log('🎯 نظام التحديات والإنجازات جاهز');
-});
-
-async function main() {
-  loadData();
-  resetChallengesIfNeeded();
-  await client.login(TOKEN);
-}
-
-main().catch(e => {
-  console.error('❌ فشل التشغيل:', e);
-  process.exit(1);
-});
-
-process.on('SIGTERM', async () => {
-  saveData();
-  await client.destroy().catch(() => {});
-  process.exit(0);
-});
+    await message.reply(`✅ تم إيداع **${amount
