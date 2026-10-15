@@ -17,7 +17,7 @@ const {
   Events
 } = require('discord.js');
 
-// خادم الويب للحفاظ على نشاط البوت على Render
+// خادم الويب لمراقبة التشغيل على Render
 const app = express();
 app.get('/', (_req, res) => res.status(200).send('✅ البوت يعمل بنجاح تام!'));
 app.get('/health', (_req, res) => res.json({ status: 'OK' }));
@@ -106,7 +106,6 @@ client.on(Events.MessageCreate, async message => {
   }
 
   if (content === '!حساب' || content === '!حسابي') {
-    const db = readData();
     const user = getUserData(userId);
     const embed = new EmbedBuilder()
       .setTitle(`💳 حساب اللاعب: ${message.author.username}`)
@@ -207,7 +206,7 @@ client.on(Events.MessageCreate, async message => {
       );
     }
 
-    const selectMenu = new StringSelectMenuOptionBuilder()
+    const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('select_market_buy')
       .setPlaceholder('🛒 اختر أصلاً لشرائه...')
       .addOptions(selectOptions);
