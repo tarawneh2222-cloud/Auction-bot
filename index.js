@@ -15,7 +15,7 @@ const {
   Events
 } = require('discord.js');
 
-// خادم ويب لمراقبة UptimeRobot
+// خادم ويب لمراقبة UptimeRobot / Render
 const web = express();
 web.get('/', (_req, res) => res.status(200).send('✅ البوت المتكامل يعمل بنجاح'));
 web.get('/health', (_req, res) => res.json({ ok: true }));
@@ -95,7 +95,6 @@ function getUserData(userId) {
       businesses: { cafe: 0, gas: 0, tech: 0 },
       lastClaimedIncome: Date.now(),
       lootboxes: 0,
-      // البيانات الجديدة:
       pet: null,
       lastPetHunt: 0,
       spouse: null,
@@ -111,14 +110,12 @@ function checkAchievements(userId, user) {
   if (!user.achievements) user.achievements = [];
   const rewards = [];
 
-  // إنجاز المليونير المبتدئ
   if ((user.balance + user.bank) >= 100000 && !user.achievements.includes('rich_100k')) {
     user.achievements.push('rich_100k');
     user.balance += 5000;
     rewards.push('🏆 **أول 100,000$**: ربحت جائزة 5,000$!');
   }
 
-  // إنجاز المستثمر (امتلاك 3 مشاريع على الأقل)
   const totalBiz = (user.businesses?.cafe || 0) + (user.businesses?.gas || 0) + (user.businesses?.tech || 0);
   if (totalBiz >= 3 && !user.achievements.includes('biz_owner')) {
     user.achievements.push('biz_owner');
@@ -126,7 +123,6 @@ function checkAchievements(userId, user) {
     rewards.push('🏢 **رائد أعمال**: تمتلك 3 مشاريع! ربحت جائزة 3,000$!');
   }
 
-  // إنجاز مروض الحيوانات
   if (user.pet && !user.achievements.includes('has_pet')) {
     user.achievements.push('has_pet');
     user.balance += 1000;
@@ -226,7 +222,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 💳 حسابي + فحص الإنجازات
+  // 💳 حسابي
   if (content === '!حسابي' || content === '!حساب') {
     const data = readData();
     const user = getUserData(userId);
@@ -234,7 +230,6 @@ client.on(Events.MessageCreate, async message => {
     data.users[userId] = user;
     saveData(data);
 
-    const hasShield = user.shieldUntil > Date.now();
     const embed = new EmbedBuilder()
       .setTitle(`💳 حساب — ${message.author.username}`)
       .addFields(
@@ -254,8 +249,6 @@ client.on(Events.MessageCreate, async message => {
     await message.reply({ embeds: [embed] });
     return;
   }
-
-  // --- 1. نظام الكازينو واليانصيب ---
 
   // 🎰 ماكينة الحظ (!سلوتس 100)
   if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
@@ -301,7 +294,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎫 شراء تذكرة يانصيب (!شراء_تذكرة)
+  // 🎫 شراء تذكرة يانصيب
   if (content === '!شراء_تذكرة' || content === '!تذكرة') {
     const data = readData();
     const user = getUserData(userId);
@@ -323,7 +316,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 📊 عرض حالة اليانصيب (!يانصيب)
+  // 📊 عرض حالة اليانصيب
   if (content === '!يانصيب') {
     const data = readData();
     const embed = new EmbedBuilder()
@@ -338,9 +331,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // --- 2. نظام الحيوانات الأليفة والرحلات ---
-
-  // 🐾 تصفح الحيوانات الأليفة (!الحيوانات)
+  // 🐾 تصفح الحيوانات الأليفة
   if (content === '!الحيوانات' || content === '!حيوانات') {
     const embed = new EmbedBuilder()
       .setTitle('🐾 متجر الحيوانات الأليفة')
@@ -355,7 +346,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🐶 تبني حيوان أليف (!تبني كلب)
+  // 🐶 تبني حيوان أليف
   if (content.startsWith('!تبني')) {
     const args = content.split(' ');
     const petType = args[1]?.toLowerCase();
@@ -384,11 +375,11 @@ client.on(Events.MessageCreate, async message => {
     data.users[userId] = user;
     saveData(data);
 
-    await message.reply(`🐾 **مبروك!** قمت بتبني **${petObj.name}** بنجاح! استخدم ` + '`!رحلة` لإرساله للبحث عن الكنوز.');
+    await message.reply(`🐾 **مبروك!** قمت بتبني **${petObj.name}** بنجاح! استخدم \`!رحلة\` لإرساله للبحث عن الكنوز.`);
     return;
   }
 
-  // 🗺️ إرسال الحيوان الأليف في رحلة (!رحلة)
+  // 🗺️ إرسال الحيوان الأليف في رحلة
   if (content === '!رحلة' || content === '!رحلة_كنز') {
     const data = readData();
     const user = getUserData(userId);
@@ -399,7 +390,7 @@ client.on(Events.MessageCreate, async message => {
     }
 
     const now = Date.now();
-    const cooldown = 2 * 60 * 60 * 1000; // ساعتان كولداون
+    const cooldown = 2 * 60 * 60 * 1000;
 
     if (user.lastPetHunt && now - user.lastPetHunt < cooldown) {
       const remaining = Math.ceil((cooldown - (now - user.lastPetHunt)) / 1000 / 60);
@@ -420,9 +411,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // --- 3. نظام الزواج والخزنة المشتركة ---
-
-  // 💍 طلب الزواج (!زواج @الشخص)
+  // 💍 طلب الزواج
   if (content.startsWith('!زواج')) {
     const target = message.mentions.users.first();
     if (!target || target.id === userId || target.bot) {
@@ -447,7 +436,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 💒 قبول الزواج (!قبول)
+  // 💒 قبول الزواج
   if (content === '!قبول' || content === '!موافقة') {
     const proposerId = pendingMarriages.get(userId);
     if (!proposerId) {
@@ -472,7 +461,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏦 إيداع في الخزنة المشتركة (!إيداع_مشترك 1000)
+  // 🏦 إيداع في الخزنة المشتركة
   if (content.startsWith('!إيداع_مشترك')) {
     const args = content.split(' ');
     const amount = parseInt(args[1]);
@@ -503,7 +492,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏦 سحب من الخزنة المشتركة (!سحب_مشترك 500)
+  // 🏦 سحب من الخزنة المشتركة
   if (content.startsWith('!سحب_مشترك')) {
     const args = content.split(' ');
     const amount = parseInt(args[1]);
@@ -534,9 +523,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // --- 4. نظام لوحة الإنجازات والأوسمة ---
-
-  // 📜 عرض الإنجازات (!انجازاتي)
+  // 📜 عرض الإنجازات
   if (content === '!انجازاتي' || content === '!إنجازاتي') {
     const data = readData();
     const user = getUserData(userId);
@@ -591,7 +578,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 📈 تداول الأسهم (!اشتري / !بيع)
+  // 📈 تداول الأسهم
   if (content.startsWith('!اشتري') && !content.includes('رتبة') && !content.includes('حماية') && !content.includes('صندوق') && !content.includes('تذكرة')) {
     const args = content.split(' ');
     const stockType = args[1]?.toLowerCase();
@@ -624,7 +611,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏢 المشاريع والأرباح (!مشاريع / !شراء_مشروع / !ارباح)
+  // 🏢 المشاريع والأرباح
   if (content === '!مشاريع') {
     const user = getUserData(userId);
     const embed = new EmbedBuilder()
