@@ -297,6 +297,10 @@ async function drawLottery() {
 setInterval(drawLottery, LOTTERY_DRAW_TIME);
 
 // ========== القائمة الرئيسية ==========
+if (['!قائمة', '!الرئيسية', '!بداية'].includes(cmd)) {
+    await sendMainMenu(message.channel);
+    return;
+  }
 async function sendMainMenu(channel) {
   resetChallengesIfNeeded();
   const embed = new EmbedBuilder()
