@@ -18,6 +18,12 @@ const DAY = 86400000;
 const WORK_COOLDOWN = 3600000;
 const GAME_COOLDOWN = 10000;
 const XP_COOLDOWN = 60000;
+const ROB_COOLDOWN = 2 * 60 * 60 * 1000;
+const ROB_MIN_TARGET = 500;
+const ROB_MAX_PERCENT = 0.2;
+const ROB_SUCCESS_RATE = 0.3;
+const ROB_PENALTY_PERCENT = 0.1;
+
 if (!TOKEN) throw new Error('Missing DISCORD_TOKEN environment variable.');
 // if (!DATABASE_URL) throw new Error('Missing DATABASE_URL environment variable.');
 
@@ -97,6 +103,7 @@ function ensureUserData(id) {
       lastWork: 0,
       lastRent: 0,
       lastGame: 0,
+      lastRob: 0,  
       lastXpMessage: 0,
       job: null,
       xp: 0,
@@ -254,6 +261,48 @@ async function leaderboardPage() {
 }
 async function dailyClaim(id) { return withUser(id, async u => { const now = Date.now(); if (u.lastDaily && now - u.lastDaily < DAY) return { ok: false, message: `⏰ يمكنك استلام المكافأة بعد ${cooldown(DAY - (now - u.lastDaily))}.` }; if (!addCash(u, 200)) return { ok: false, message: '❌ وصلت إلى الحد الأقصى للرصيد.' }; u.lastDaily = now; const levels = addXP(u, 10); return { ok: true, message: `🎁 استلمت **200 ريال** كمكافأة يومية.${levels ? ` وصلت للمستوى ${u.level}!` : ''}` }; }); }
 async function workShift(id) { return withUser(id, async u => { if (!u.job || !JOBS[u.job]) return { ok: false, message: '❌ اختر وظيفة من لوحة الوظائف أولاً.' }; const now = Date.now(); if (u.lastWork && now - u.lastWork < WORK_COOLDOWN) return { ok: false, message: `⏰ يمكنك العمل بعد ${cooldown(WORK_COOLDOWN - (now - u.lastWork))}.` }; const j = JOBS[u.job]; if (!addCash(u, j.salary)) return { ok: false, message: '❌ وصلت إلى الحد الأقصى للرصيد.' }; u.lastWork = now; const levels = addXP(u, j.xp); return { ok: true, message: `💼 استلمت راتب وظيفة **${u.job}**: **${money(j.salary)} ريال**.${levels ? ` مستواك الآن ${u.level}.` : ''}` }; }); }
+async function attemptRob(robberId, targetId) {
+  if (robberId === targetId) return { ok: false, message: '❌ لا يمكنك سرقة نفسك!' };
+  
+  const robber = ensureUserData(robberId);
+  const target = ensureUserData(targetId);
+  const now = Date.now();
+  
+  if (robber.lastRob && now - robber.lastRob < ROB_COOLDOWN) {
+    return { ok: false, message: `⏰ لقد حاولت السرقة مؤخراً. حاول بعد ${cooldown(ROB_COOLDOWN - (now - robber.lastRob))}` };
+  }
+  
+  if (target.balance < ROB_MIN_TARGET) {
+    return { ok: false, message: '❌ هذا الشخص لا يملك ما يكفي من المال لسرقته!' };
+  }
+  
+  robber.lastRob = now;
+  const success = Math.random() < ROB_SUCCESS_RATE;
+  
+  if (success) {
+    const stolen = Math.floor(target.balance * ROB_MAX_PERCENT);
+    target.balance -= stolen;
+    robber.balance = Math.min(MAX_MONEY, robber.balance + stolen);
+    saveData();
+    return { 
+      ok: true, 
+      success: true,
+      message: `✅ نجحت محاولتك! سرقت **${money(stolen)} ريال** من هذا الشخص.`,
+      stolen: stolen
+    };
+  } else {
+    const penalty = Math.floor(robber.balance * ROB_PENALTY_PERCENT);
+    const actualPenalty = Math.min(penalty, robber.balance);
+    robber.balance -= actualPenalty;
+    saveData();
+    return { 
+      ok: true, 
+      success: false,
+      message: `❌ فشلت محاولتك! تم اكتشافك وخسرت **${money(actualPenalty)} ريال** كعقوبة.`,
+      penalty: actualPenalty
+    };
+  }
+}
 
 async function prefixCommand(message) { const text = message.content.trim(); if (!text.startsWith('!')) return false; const parts = text.slice(1).split(/\s+/), cmd = parts.shift(), id = message.author.id;
   if (['مساعدة', 'اوامر', 'أوامر'].includes(cmd)) { await message.reply('اكتب `!لوحة` لفتح كل الميزات التفاعلية. الأوامر القديمة `!حسابي` و`!راتب` ما زالت تعمل.'); return true; }
@@ -267,8 +316,20 @@ async function prefixCommand(message) { const text = message.content.trim(); if 
   if (['مقتنياتي', 'حقيبتي'].includes(cmd)) { const p = await inventoryPage(id); await message.reply({ embeds: p.embeds, components: p.components }); return true; }
   if (['محفظتي', 'استثماراتي'].includes(cmd)) { const p = await portfolioPage(id); await message.reply({ embeds: p.embeds, components: p.components }); return true; }
   if (cmd === 'ترتيب') { const p = await leaderboardPage(); await message.reply({ embeds: p.embeds }); return true; }
-  return false;
+  if (cmd === 'سرقة' || cmd === 'نهب') {
+  const targetUser = message.mentions.users.first();
+  if (!targetUser) {
+    await message.reply('❌ استخدم الأمر: `!سرقة @الشخص`');
+    return true;
+  }
+  const result = await attemptRob(message.author.id, targetUser.id);
+  await message.reply(result.message);
+  return true;
 }
+
+return false;
+                                       
+ return false;
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
   try { if (message.content.trim().startsWith('!')) { await prefixCommand(message); return; }
