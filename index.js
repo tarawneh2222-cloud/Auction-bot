@@ -489,9 +489,9 @@ client.on(Events.InteractionCreate, async interaction => {
         desc += '🎯 أنشئ مهمة مشتركة مع صديقك واكسبا معاً مكافآت أكبر!\n\n';
         desc += '📋 الأوامر المتاحة:\n';
         desc += '`!مهمة @الصديق اسم المهمة المكافأة` — إنشاء مهمة مشتركة\n';
-        desc += '`مهامي` — عرض مهامك الحالية\n';
-        desc += '`أوافق المهمة` — الموافقة على مهمة\n';
-        desc += '`أكمل المهمة` — إنهاء المهمة معاً\n\n';
+        desc += '`!مهامي` — عرض مهامك الحالية\n';
+        desc += '`!أوافق رقم المهمة` — الموافقة على مهمة\n';
+        desc += '`!أكمل رقم المهمة` — إنهاء المهمة معاً\n\n';
         desc += '💡 المهمة تكتمل عندما يوافق الطرفان عليها، وتُضاف المكافأة لكليكما في نفس الوقت! 🎉';
         
         const embed = new EmbedBuilder()
@@ -912,12 +912,4 @@ client.on(Events.MessageCreate, async message => {
     const amount = parseInt(args[1]);
     if (isNaN(amount) || amount <= 0 || amount > user.balance) {
       await message.reply('❌ استخدم: `!إيداع 100`');
-      return;
-    }
-    user.balance -= amount;
-    user.bank += amount;
-    user.stats.deposit += amount;
-    data.challenges.daily.save1 = (data.challenges.daily.save1 || 0) + amount;
-    checkAchievements(userId);
-    saveData();
-    await message.reply(`✅ تم إيداع **${amount
+      return
