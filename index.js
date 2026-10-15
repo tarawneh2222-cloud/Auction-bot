@@ -208,23 +208,33 @@ client.on(Events.InteractionCreate, async interaction => {
         break;
       
       case 'coop_join':
-        if (!data.missions.coop) data.missions.coop = { members: [], required: 3, reward: 2000 };
-        if (!data.missions.coop.members.includes(userId)) {
-          data.missions.coop.members.push(userId);
-          if (data.missions.coop.members.length >= data.missions.coop.required) {
-            const share = Math.floor(data.missions.coop.reward / data.missions.coop.required);
-            data.missions.coop.members.forEach(mid => {
-              if (!data.users[mid]) data.users[mid] = { balance: 0 };
-              data.users[mid].balance += share;
-            });
-            data.missions.coop = { members: [], required: 3, reward: 2000 };
-            saveData(data);
-            await interaction.update({ 
-              content: `🎉 **اكتملت المهمة التعاونية!** 🎉\n\nكل عضو حصل على **${share}** عملة!💰✅`, 
-              components: [] 
-            });
-            return;
-          }
+  if (!data.missions) data.missions = {};
+  if (!data.missions.coop) data.missions.coop = { members: [], required: 3, reward: 2000 };
+  if (!data.missions.coop.members.includes(userId)) {
+    data.missions.coop.members.push(userId);
+    if (data.missions.coop.members.length >= data.missions.coop.required) {
+      const share = Math.floor(data.missions.coop.reward / data.missions.coop.required);
+      data.missions.coop.members.forEach(mid => {
+        if (!data.users[mid]) data.users[mid] = { balance: 0 };
+        data.users[mid].balance += share;
+      });
+      data.missions.coop = { members: [], required: 3, reward: 2000 };
+      saveData(data);
+      await interaction.update({
+        content: `🎉 **اكتملت المهمة التعاونية!** 🎉\n\nكل عضو حصل على **${share}** عملة!💰✅`,
+        components: []
+      });
+      return;
+    }
+    saveData(data);
+  }
+  const m = data.missions.coop;
+  await interaction.update({
+    content: `🤝 انضممت للمهمة!\n\nالأعضاء: ${m.members.length}/${m.required}\nالمكافأة الكلية: ${m.reward} عملة\nفي انتظار باقي الفريق...⏳`,
+    components: []
+  });
+  break;
+
           saveData(data);
         }
         const m = data.missions.coop;
