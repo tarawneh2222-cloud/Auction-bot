@@ -159,7 +159,7 @@ function updateMarketPrices() {
         data.market.assets[key] = { ...DEFAULT_MARKET_ASSETS[key] };
       }
       const currentPrice = data.market.assets[key].price;
-      const changePercent = (Math.random() * 0.30) - 0.15; // تذبذب متوازن (-15% إلى +15%)
+      const changePercent = (Math.random() * 0.30) - 0.15;
       let newPrice = Math.round(currentPrice * (1 + changePercent));
       if (newPrice < 500) newPrice = 500;
 
@@ -185,7 +185,7 @@ const client = new Client({
 });
 
 client.once(Events.ClientReady, () => {
-  console.log(`✅ البوت المتطور ${client.user.tag} يعمل بكفاءة تامة!`);
+  console.log(`✅ بوت الاقتصاد المتطور ${client.user.tag} يعمل بكفاءة تامة!`);
   setInterval(updateMarketPrices, 5 * 60 * 1000);
 });
 
@@ -289,7 +289,7 @@ client.on(Events.MessageCreate, async message => {
 
     const embed = new EmbedBuilder()
       .setTitle('📈 الأسعار الحالية في البورصة')
-      .setDescription('اختر الأصل المراد شاؤه مباشرة من قائمة الاختيار أدناه لتسهيل العملية! 🛒')
+      .setDescription('اختر الأصل المراد شراءه مباشرة من قائمة الاختيار أدناه لتسهيل العملية! 🛒')
       .setColor('#2b90d9');
 
     const selectOptions = [];
@@ -600,7 +600,7 @@ client.on(Events.MessageCreate, async message => {
     } else {
       data.users[userId] = user;
       saveData(data);
-      await message.reply('❌ **خمنت الرقم ' + guess + '** وكان الرقم الصحيح هو **' + winningNumber + '**. خست الرهان.');
+      await message.reply('❌ **خمنت الرقم ' + guess + '** وكان الرقم الصحيح هو **' + winningNumber + '**. خسرت الرهان.');
     }
     return;
   }
@@ -624,7 +624,7 @@ client.on(Events.MessageCreate, async message => {
     } else {
       data.users[userId] = user;
       saveData(data);
-      await message.reply('🏁 فازت السيارة (' + winner + ') وسياراتك (' + myCar + ') خسرت الرهان.');
+      await message.reply('🏁 فازت السيارة (' + winner + ') وسيارتك (' + myCar + ') خسرت الرهان.');
     }
     return;
   }
@@ -785,7 +785,7 @@ client.on(Events.MessageCreate, async message => {
     let desc = '';
     users.forEach((u, i) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-      desc += medal + ' <@' + u.id + '> — **' + u.total.toLocaleString() + '** $\n'; }); const embed = new EmbedBuilder().setTitle('🏆 أغنى اللاعبين').setDescription(desc \vert{}\vert{} 'لا توجد بيانات').setColor('#f1c40f'); await message.reply({ embeds: [embed] }); return; } });  // 🔘 معالج الأزرار والقوائم التفاعلية المباشرة client.on(Events.InteractionCreate, async interaction => { const userId = interaction.user.id; const data = readData(); const user = getUserData(userId);    // معالجة القائمة المنسدلة لشراء الأصول if (interaction.isStringSelectMenu() && interaction.customId === 'select_buy_asset') { const selected = interaction.values[0]; const key = selected.replace('buy_', '');      if (!data.market.assets[key]) { await interaction.reply({ content: '❌ حدث خطأ، لم يتم العثور على الأصل!', ephemeral: true }); return; }      const asset = data.market.assets[key];      if (user.balance < asset.price) { await interaction.reply({ content: '❌ رصيدك النقدي الحالي (**' + user.balance.toLocaleString() + '$**) لا يكفي لشراء **' + asset.name + '** (' + asset.price.toLocaleString() + '$)!',
+      desc += medal + ' <@' + u.id + '> — **' + u.total.toLocaleString() + '** $\n'; });  // تم إصلاح الخطأ البرمجي هنا بنجاح const embed = new EmbedBuilder() .setTitle('🏆 أغنى اللاعبين') .setDescription(desc \vert{}\vert{} 'لا توجد بيانات') .setColor('#f1c40f');      await message.reply({ embeds: [embed] }); return; } });  // 🔘 معالج الأزرار والقوائم التفاعلية المباشرة client.on(Events.InteractionCreate, async interaction => { const userId = interaction.user.id; const data = readData(); const user = getUserData(userId);    // معالجة القائمة المنسدلة لشراء الأصول if (interaction.isStringSelectMenu() && interaction.customId === 'select_buy_asset') { const selected = interaction.values[0]; const key = selected.replace('buy_', '');      if (!data.market.assets[key]) { await interaction.reply({ content: '❌ حدث خطأ، لم يتم العثور على الأصل!', ephemeral: true }); return; }      const asset = data.market.assets[key];      if (user.balance < asset.price) { await interaction.reply({ content: '❌ رصيدك النقدي الحالي (**' + user.balance.toLocaleString() + '$**) لا يكفي لشراء **' + asset.name + '** (' + asset.price.toLocaleString() + '$)!',
         ephemeral: true
       });
       return;
