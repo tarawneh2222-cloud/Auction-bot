@@ -90,6 +90,7 @@ function getUserData(userId) {
       dailyLast: '',
       dailyStreak: 0,
       shieldUntil: 0,
+      lastRob: 0,
       businesses: { cafe: 0, gas: 0, tech: 0 },
       lastClaimedIncome: Date.now(),
       lootboxes: 0,
@@ -177,11 +178,11 @@ client.on(Events.MessageCreate, async message => {
 
   updateMarketPrices();
 
-  // 🏛️ القائمة الرئيسية
+  // 🏛️ القائمة الرئيسية والأزرار
   if (content === '!قائمة' || content === '!القائمة') {
     const embed = new EmbedBuilder()
       .setTitle('🏛️ المركز الاقتصادي والترفيهي المتكامل')
-      .setDescription('اختر الخيار المراد من الأزرار أدناه:')
+      .setDescription('اختر الخيار المراد من الأزرار التفاعلية أدناه:')
       .setColor('#2b90d9')
       .setFooter({ text: 'اقتصاد افتراضي متكامل • استمتع بالألعاب والمزايا!' });
 
@@ -218,6 +219,7 @@ client.on(Events.MessageCreate, async message => {
     const embed = new EmbedBuilder()
       .setTitle('📜 قائمة الأوامر الشاملة')
       .addFields(
+        { name: '🦹‍♂️ نظام النهب والسرقة', value: '`!نهب @الشخص` (نسبة نجاح 45% - يتطلب درع حماية أو غرامة)' },
         { name: '🎰 الكازينو واليانصيب', value: '`!سلوتس [المبلغ]` | `!شراء_تذكرة` | `!يانصيب`' },
         { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` | `!تبني [كلب/قطة/تنين]` | `!رحلة`' },
         { name: '💍 الزواج والخزنة', value: '`!زواج @الشخص` | `!قبول` | `!إيداع_مشترك [مبلغ]` | `!سحب_مشترك [مبلغ]`' },
@@ -226,6 +228,62 @@ client.on(Events.MessageCreate, async message => {
       )
       .setColor('#2ecc71');
     await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // 🦹‍♂️ نظام النهب والسرقة
+  if (content.startsWith('!نهب') || content.startsWith('!سرقة')) {
+    const target = message.mentions.users.first();
+    if (!target || target.id === userId || target.bot) {
+      await message.reply('❌ يرجى منشن الشخص المراد نهبه بشكل صحيح! مثال: `!نهب @الشخص`');
+      return;
+    }
+
+    const data = readData();
+    const user = getUserData(userId);
+    const targetData = getUserData(target.id);
+    const now = Date.now();
+    const cooldown = 15 * 60 * 1000; // 15 دقيقة كولداون
+
+    if (now - (user.lastRob || 0) < cooldown) {
+      const rem = Math.ceil((cooldown - (now - user.lastRob)) / 1000 / 60);
+      await message.reply('⏳ أنت متعب ومطلوب أمنياً! انتظر **' + rem + ' دقيقة** قبل محاولة نهب أخرى.');
+      return;
+    }
+
+    // فحص درع الحماية للهدف
+    if (targetData.shieldUntil && targetData.shieldUntil > now) {
+      user.lastRob = now;
+      user.balance = Math.max(0, user.balance - 200);
+      data.users[userId] = user;
+      saveData(data);
+      await message.reply('🛡️ هذا الشخص يمتلك **درع حماية نشط**! فشلت محاولة النهب وتم تغريمك 200$ نظير محاولتك الفاشلة.');
+      return;
+    }
+
+    if (targetData.balance < 200) {
+      await message.reply('❌ هذا الشخص فقير جداً ولا يمتلك ما يكفي لسرقته (أقل من 200$ نقداً)!');
+      return;
+    }
+
+    user.lastRob = now;
+    const success = Math.random() < 0.45; // نسبة نجاح 45%
+
+    if (success) {
+      const stolen = Math.floor(Math.random() * (targetData.balance * 0.25)) + 50;
+      targetData.balance -= stolen;
+      user.balance += stolen;
+      data.users[userId] = user;
+      data.users[target.id] = targetData;
+      saveData(data);
+      await message.reply('🦹‍♂️ **نجحت عملية النهب باحتراف!** سرقت **' + stolen + '$** نقداً من <@' + target.id + '> 💰🔥');
+    } else {
+      const fine = 300;
+      user.balance = Math.max(0, user.balance - fine);
+      data.users[userId] = user;
+      saveData(data);
+      await message.reply('🚨 **فشلت عملية النهب!** ألقت الشرطة القبض عليك أثناء الفرار وغرمتك **' + fine + '$** 👮‍♂️❌');
+    }
     return;
   }
 
@@ -881,56 +939,139 @@ client.on(Events.MessageCreate, async message => {
   }
 });
 
-// معالج الأزرار التفاعلية للقائمة الرئيسية
+// معالج الأزرار التفاعلية (أزرار حقيقية تقوم بتنفيذ الإجراءات مباشرة)
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
   const userId = interaction.user.id;
+  const data = readData();
   const user = getUserData(userId);
 
   try {
     switch (interaction.customId) {
       case 'account':
-        await interaction.reply({ content: '💳 رصيدك النقدي: **' + user.balance + '$** | في البنك: **' + user.bank + '$**', ephemeral: true });
+        await interaction.reply({
+          content: '💳 **حسابك الشخصي:**\n- النقدي: **' + user.balance + '$**\n- البنك: **' + user.bank + '$**\n- الخزنة المشتركة: **' + (user.sharedVault || 0) + '$**',
+          ephemeral: true
+        });
         break;
+
       case 'bank':
-        await interaction.reply({ content: '🏦 البنك:\nإيداع: `!إيداع [المبلغ]` أو `!إيداع الكل`\nسحب: `!سحب [المبلغ]` أو `!سحب الكل`', ephemeral: true });
+        await interaction.reply({
+          content: '🏦 **نظام البنك:**\n- للإيداع: اكتب `!إيداع [المبلغ]` أو `!إيداع الكل`\n- للسحب: اكتب `!سحب [المبلغ]` أو `!سحب الكل`',
+          ephemeral: true
+        });
         break;
-      case 'daily':
-        await interaction.reply({ content: '🎁 للحصول على مكافأتك اليومية والستريك، اكتب في الشات: `!يومية`', ephemeral: true });
+
+      case 'daily': {
+        const today = new Date().toDateString();
+        if (user.dailyLast === today) {
+          await interaction.reply({ content: '⏳ لقد استلمت مكافأتك اليومية بالفعل اليوم!', ephemeral: true });
+          return;
+        }
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (user.dailyLast === yesterday.toDateString()) {
+          user.dailyStreak = (user.dailyStreak || 0) + 1;
+        } else {
+          user.dailyStreak = 1;
+        }
+        const totalAmount = 250 + ((user.dailyStreak - 1) * 50);
+        user.balance += totalAmount;
+        user.dailyLast = today;
+        data.users[userId] = user;
+        saveData(data);
+
+        await interaction.reply({
+          content: '🎁 **تم استلام مكافأتك اليومية بنجاح!**\n💰 المبلغ: **' + totalAmount + '$** (ستريك ' + user.dailyStreak + ' أيام 🔥)',
+          ephemeral: true
+        });
         break;
+      }
+
       case 'portfolio':
-        await interaction.reply({ content: '📈 محفظتك:\n🥇 ذهب: ' + (user.stocks?.gold || 0) + '\n🛢️ نفط: ' + (user.stocks?.oil || 0) + '\n🌾 قمح: ' + (user.stocks?.wheat || 0), ephemeral: true });
+        await interaction.reply({
+          content: '📈 **محفظتك الاستثمارية:**\n- 🥇 ذهب: **' + (user.stocks?.gold || 0) + '**\n- 🛢️ نفط: **' + (user.stocks?.oil || 0) + '**\n- 🌾 قمح: **' + (user.stocks?.wheat || 0) + '**',
+          ephemeral: true
+        });
         break;
-      case 'market':
-        await interaction.reply({ content: '📊 لمعرفة أسعار السوق الحالية والتداول، اكتب: `!سوق`', ephemeral: true });
+
+      case 'market': {
+        const prices = data.market.prices;
+        await interaction.reply({
+          content: '📊 **أسعار السوق الحالية:**\n- ذهب: `' + prices.gold + '$`\n- نفط: `' + prices.oil + '$`\n- قمح: `' + prices.wheat + '$`\n(اشتري عبر `!اشتري [النوع] [الكمية]`)',
+          ephemeral: true
+        });
         break;
-      case 'businesses':
-        await interaction.reply({ content: '🏢 لعرض المشاريع المتاحة والشراء، اكتب: `!مشاريع` | ولجمع الأرباح: `!ارباح`', ephemeral: true });
+      }
+
+      case 'businesses': {
+        const c = user.businesses?.cafe || 0;
+        const g = user.businesses?.gas || 0;
+        const t = user.businesses?.tech || 0;
+        await interaction.reply({
+          content: '🏢 **مشاريعك:**\n- مقاهي ☕: ' + c + '\n- محطات بنزين ⛽: ' + g + '\n- شركات تكنولوجيا 💻: ' + t + '\nلجمع الأرباح اكتب: `!ارباح`',
+          ephemeral: true
+        });
         break;
+      }
+
       case 'pets':
-        await interaction.reply({ content: user.pet ? '🐾 حيوانك: ' + PETS[user.pet].name + '\nاستخدم `!رحلة` لجلب الكنوز!' : 'لا تملك حيواناً أليفاً! تصفح المتجر عبر `!الحيوانات`.', ephemeral: true });
+        await interaction.reply({
+          content: user.pet ? '🐾 حيوانك الأليف: **' + PETS[user.pet].name + '**\nأرسله لرحلة كنز بكتابة: `!رحلة`' : '❌ لا تملك حيواناً أليفاً! تصفح المتجر عبر كتابة `!الحيوانات`.',
+          ephemeral: true
+        });
         break;
+
       case 'marriage':
-        await interaction.reply({ content: user.spouse ? '💍 متزوج من <@' + user.spouse + '> | الخزنة المشتركة: ' + (user.sharedVault || 0) + '$' : 'لست متزوجاً. استخدم `!زواج @الشخص`.', ephemeral: true });
+        await interaction.reply({
+          content: user.spouse ? '💍 متزوج من <@' + user.spouse + '> | الخزنة المشتركة: **' + (user.sharedVault || 0) + '$**' : '💍 لست متزوجاً بعد. استخدم الأمر `!زواج @الشخص` لطلب الزواج.',
+          ephemeral: true
+        });
         break;
+
       case 'games':
-        await interaction.reply({ content: '🎰 للألعاب والكازينو:\n`!سلوتس [المبلغ]`\n`!شراء_تذكرة` (اليانصيب)', ephemeral: true });
+        await interaction.reply({
+          content: '🎰 **الألعاب والكازينو:**\n- سلوتس: `!سلوتس [المبلغ]`\n- اليانصيب: `!شراء_تذكرة` (الجائزة الكبرى: ' + data.lottery.pool + '$)',
+          ephemeral: true
+        });
         break;
+
       case 'achievements':
-        await interaction.reply({ content: '📜 عدد إنجازاتك المحققة: ' + (user.achievements?.length || 0) + '\nلمعرفة التفاصيل اكتب: `!انجازاتي`', ephemeral: true });
+        await interaction.reply({
+          content: '📜 إنجازاتك المحققة: **' + (user.achievements?.length || 0) + '** إنجاز.\nلعرض تفاصيلها اكتب: `!انجازاتي`',
+          ephemeral: true
+        });
         break;
-      case 'leaderboard':
-        await interaction.reply({ content: '🏆 لعرض قائمة أغنى اللاعبين، اكتب: `!ترتيب`', ephemeral: true });
+
+      case 'leaderboard': {
+        const topUsers = Object.entries(data.users)
+          .map(([id, u]) => ({ id, total: (u.balance || 0) + (u.bank || 0) }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+        let topText = '🏆 **أغنى 5 لاعبين:**\n';
+        topUsers.forEach((u, i) => {
+          topText += (i + 1) + '. <@' + u.id + '> — **' + u.total + '$**\n';
+        });
+        await interaction.reply({ content: topText, ephemeral: true });
         break;
+      }
+
       case 'shop':
-        await interaction.reply({ content: '🛒 لعرض المتجر وشراء الدروع والصناديق والرتب، اكتب: `!متجر` أو `!رتب`', ephemeral: true });
+        await interaction.reply({
+          content: '🛒 **المتجر السريع:**\n- درع حماية: `!اشتري حماية` (1000$)\n- صندوق حظ: `!اشتري صندوق` (500$)\n- الرتب الشرفية: `!رتب`',
+          ephemeral: true
+        });
         break;
+
       default:
-        await interaction.reply({ content: '✅ تم استلام طلبك بنجاح!', ephemeral: true });
+        await interaction.reply({ content: '✅ تم تنفيذ الأمر بنجاح!', ephemeral: true });
         break;
     }
   } catch (err) {
-    console.error('Button error:', err);
+    console.error('Button interaction error:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأزرار.', ephemeral: true }).catch(() => {});
+    }
   }
 });
 
