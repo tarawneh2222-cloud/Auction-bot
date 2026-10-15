@@ -248,7 +248,23 @@ client.on(Events.MessageCreate, async message => {
   const user = ensureUser(userId);
   const now = Date.now();
   resetChallengesIfNeeded();
-
+  // === القائمة الرئيسية ===
+  if (['!قائمة', '!الرئيسية', '!بداية'].includes(cmd)) {
+    const embed = new EmbedBuilder()
+      .setColor('#3498db')
+      .setTitle('🏦 القائمة الرئيسية')
+      .setDescription('اختر ما تريد:')
+      .addFields(
+        { name: '💰 المالية', value: '`!حساب` — رصيدك\n`!يومي` — مكافأة يومية\n`!إيداع` `!سحب` — البنك', inline: true },
+        { name: '📊 الأسهم', value: '`!سوق` — الأسعار\n`!محفظة` — أسهمك\n`!شراء` `!بيع` — تداول', inline: true },
+        { name: '🤝 الأصدقاء', value: '`!أضف` — صديق جديد\n`!أصدقائي` — قائمتك\n`!هدية` — إرسال هدية', inline: true },
+        { name: '👥 التعاون', value: '`!مهمة` — مهمة مشتركة\n`!مهامي` — مهامك\n`!أوافق` `!أكمل`', inline: true },
+        { name: '📖 المساعدة', value: '`!مساعدة` — جميع الأوامر', inline: true }
+      );
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+  
   // === حسابي ===
   if (cmd === '!حساب' || cmd === '!رصيد') {
     const portfolioVal = calculatePortfolioValue(userId);
