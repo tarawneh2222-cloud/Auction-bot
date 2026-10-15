@@ -107,7 +107,7 @@ const DAILY_COOLDOWN = 24 * 60 * 60 * 1000;
 const WORK_COOLDOWN = 5 * 60 * 1000;
 const CRIME_COOLDOWN = 10 * 60 * 1000;
 const LOTTERY_TICKET_PRICE = 10;
-const LOTTERY_DRAW_TIME = 60 * 60 * 1000; // كل ساعة
+const LOTTERY_DRAW_TIME = 60 * 60 * 1000;
 
 // ========== نظام اليانصيب ==========
 function initLottery() {
@@ -131,15 +131,12 @@ async function drawLottery() {
     return;
   }
   
-  // اختيار فائز عشوائي
   const winnerId = lottery.participants[Math.floor(Math.random() * lottery.participants.length)];
   const prize = lottery.pot;
   const winner = ensureUser(winnerId);
   
-  // إضافة الجائزة للفائز
   winner.balance = Math.min(MAX_MONEY, winner.balance + prize);
   
-  // إرسال إشعار للفائز في أول سيرفر مشترك
   try {
     for (const guild of client.guilds.cache.values()) {
       const member = await guild.members.fetch(winnerId).catch(() => null);
@@ -159,7 +156,6 @@ async function drawLottery() {
   
   console.log(`🎫 تم السحب! الفائز: ${winnerId} | الجائزة: ${prize} دينار`);
   
-  // بدء جولة جديدة
   data.lotteries.current = {
     participants: [],
     pot: 0,
@@ -169,13 +165,11 @@ async function drawLottery() {
   saveData();
 }
 
-// تشغيل السحب كل ساعة
 setInterval(() => {
   console.log('🎫 جاري سحب اليانصيب...');
   drawLottery();
 }, LOTTERY_DRAW_TIME);
 
-// التحقق من سحب فات عند تشغيل البوت
 function checkMissedDraw() {
   initLottery();
   const lottery = data.lotteries.current;
@@ -324,8 +318,8 @@ client.on(Events.InteractionCreate, async interaction => {
       case 'crime': {
         const embed = new EmbedBuilder()
           .setColor('#34495e')
+          .setDescription('أوامر ممتعة لكسب المال بشكل عشوائي')
           .setTitle('🎭 مغامرات يومية')
-          .setDescription 'أوامر ممتعة لكسب المال بشكل عشوائي'
           .addFields(
             { name: '🏃 مهمة مخاطرة', value: 'اكتب: !مهمة — ربح أو غرامة', inline: false },
             { name: '🎣 صيد السمك', value: 'اكتب: !صيد — اصطد واربح', inline: false },
@@ -423,7 +417,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
   
-  // !إيداع
   if (cmd === '!إيداع' || cmd === '!ايداع') {
     const amount = parseInt(args[1]);
     const user = ensureUser(message.author.id);
@@ -438,7 +431,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
   
-  // !سحب
   if (cmd === '!سحب') {
     const amount = parseInt(args[1]);
     const user = ensureUser(message.author.id);
@@ -453,7 +445,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎫 شراء تذكرة اليانصيب
   if (cmd === '!تذكرة' || cmd === '!يانصيب') {
     initLottery();
     const user = ensureUser(message.author.id);
@@ -464,12 +455,9 @@ client.on(Events.MessageCreate, async message => {
     }
     
     const lottery = data.lotteries.current;
-    
-    // خصم السعر وإضافة للجائزة
     user.balance -= LOTTERY_TICKET_PRICE;
     lottery.pot += LOTTERY_TICKET_PRICE;
     
-    // إضافة للمشاركين مرة واحدة فقط لكل شخص في الجولة
     if (!lottery.participants.includes(message.author.id)) {
       lottery.participants.push(message.author.id);
     }
@@ -488,7 +476,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // !سرقة
   if (cmd === '!سرقة' || cmd === '!نهب') {
     const now = Date.now();
     const target = message.mentions.users.first();
@@ -529,7 +516,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎮 النرد
   if (cmd === '!نرد') {
     const amount = parseInt(args[1]);
     const user = ensureUser(message.author.id);
@@ -552,7 +538,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎮 تخمين
   if (cmd === '!تخمين') {
     const amount = parseInt(args[1]);
     const user = ensureUser(message.author.id);
@@ -580,7 +565,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎮 حجر ورق مقص
   if (cmd === '!حجر' || cmd === '!ورق' || cmd === '!مقص') {
     const choice = cmd.slice(1);
     const amount = parseInt(args[1]);
@@ -611,7 +595,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🪙 عملة
   if (cmd === '!عملة') {
     const amount = parseInt(args[1]);
     const pick = (args[2] || '').toLowerCase();
@@ -632,7 +615,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎭 مهمة
   if (cmd === '!مهمة') {
     const now = Date.now();
     const user = ensureUser(message.author.id);
@@ -655,7 +637,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎣 صيد
   if (cmd === '!صيد') {
     const user = ensureUser(message.author.id);
     const fish = [
@@ -675,7 +656,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // ⛏️ تنقيب
   if (cmd === '!تنقيب') {
     const user = ensureUser(message.author.id);
     const items = [
@@ -695,7 +675,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🔧 تعويض
   if (cmd === '!تعويض' || cmd === '!أعط') {
     if (!ADMIN_IDS.includes(message.author.id)) {
       await message.reply('❌ للمدير فقط');
@@ -718,7 +697,7 @@ client.on(Events.MessageCreate, async message => {
 client.once(Events.ClientReady, () => {
   console.log(`✅ البوت جاهز: ${client.user.tag}`);
   initLottery();
-  checkMissedDraw(); // سحب أي جولة فاتت
+  checkMissedDraw();
   console.log('🎫 نظام اليانصيب جاهز — السحب كل ساعة');
 });
 
