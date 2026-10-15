@@ -63,10 +63,16 @@ function readData() {
     const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
     if (!data.users) data.users = {};
     if (!data.lottery) data.lottery = { pool: 1000, tickets: [] };
-    if (!data.market) data.market = { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() };
+    if (!data.market) data.market = {};
+    if (!data.market.prices) data.market.prices = { gold: 100, oil: 50, wheat: 30 };
+    if (!data.market.lastUpdate) data.market.lastUpdate = Date.now();
     return data;
   } catch (err) {
-    return { users: {}, lottery: { pool: 1000, tickets: [] }, market: { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() } };
+    return {
+      users: {},
+      lottery: { pool: 1000, tickets: [] },
+      market: { prices: { gold: 100, oil: 50, wheat: 30 }, lastUpdate: Date.now() }
+    };
   }
 }
 
@@ -129,6 +135,9 @@ function checkAchievements(userId, user) {
 
 function updateMarketPrices() {
   const data = readData();
+  if (!data.market) data.market = {};
+  if (!data.market.prices) data.market.prices = { gold: 100, oil: 50, wheat: 30 };
+  
   const now = Date.now();
   const lastUpdate = data.market.lastUpdate ? data.market.lastUpdate : 0;
   if (now - lastUpdate >= 3600000) {
