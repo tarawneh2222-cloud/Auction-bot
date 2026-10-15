@@ -153,7 +153,6 @@ function checkAchievements(userId, user) {
   return rewards;
 }
 
-// تحديث أسعار السوق بشكل متناسب
 function updateMarketPrices() {
   const data = readData();
   const now = Date.now();
@@ -208,7 +207,6 @@ client.on(Events.MessageCreate, async message => {
 
   updateMarketPrices();
 
-  // 🏛️ القائمة الرئيسية الشاملة
   if (content === '!قائمة' || content === '!القائمة') {
     const embed = new EmbedBuilder()
       .setTitle('🏛️ المركز الاقتصادي والتداولي المتكامل')
@@ -238,7 +236,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🦹‍♂️ نظام النهب والسرقة
   if (content.startsWith('!نهب') || content.startsWith('!سرقة')) {
     const target = message.mentions.users.first();
     if (!target || target.id === userId || target.bot) {
@@ -294,7 +291,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 📊 عرض السوق مع قائمة الشراء التفاعلية السريعة
   if (content === '!سوق') {
     const data = readData();
     const assets = data.market.assets;
@@ -333,7 +329,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 📜 قائمة المساعدة
   if (content === '!مساعدة' || content === '!اوامر') {
     const embed = new EmbedBuilder()
       .setTitle('📜 قائمة الأوامر الشاملة')
@@ -349,7 +344,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 💳 حسابي
   if (content === '!حسابي' || content === '!حساب') {
     const data = readData();
     const user = getUserData(userId);
@@ -383,7 +377,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏦 الإيداع والسحب والتحويل
   if (content.startsWith('!إيداع')) {
     const data = readData();
     const user = getUserData(userId);
@@ -459,7 +452,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🛒 المتجر
   if (content === '!متجر') {
     const embed = new EmbedBuilder()
       .setTitle('🛒 المتجر العام')
@@ -519,7 +511,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏷️ الرتب
   if (content === '!رتب' || content === '!الرتب') {
     const embed = new EmbedBuilder()
       .setTitle('🏷️ متجر الرتب الشرفية')
@@ -560,7 +551,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎁 اليومية
   if (content === '!يومية' || content === '!يومي') {
     const data = readData();
     const user = getUserData(userId);
@@ -584,7 +574,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎰 سلوتس والألعاب
   if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
     const bet = parseInt(content.split(' ')[1]);
     if (isNaN(bet) || bet <= 0) {
@@ -682,7 +671,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🐾 الحيوانات
   if (content === '!الحيوانات' || content === '!حيوانات') {
     const embed = new EmbedBuilder()
       .setTitle('🐾 متجر الحيوانات الأليفة')
@@ -740,7 +728,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 💍 الزواج
   if (content.startsWith('!زواج')) {
     const target = message.mentions.users.first();
     if (!target || target.id === userId || target.bot) {
@@ -777,7 +764,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏢 المشاريع والشراء
   if (content === '!مشاريع') {
     const user = getUserData(userId);
     const b = user.businesses || {};
