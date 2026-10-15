@@ -403,10 +403,10 @@ async function main() {
   await client.login(TOKEN);
 }
 
- main().catch(e => { console.error('❌ Startup failed:', e); process.exit(1); });
-                                      
+main().catch(e => { console.error('❌ Startup failed:', e); process.exit(1); });
+
 process.on('SIGTERM', async () => {
   await client.destroy().catch(() => { });
-  // await pool.end().catch(() => { });
   process.exit(0);
 });
+                                       
