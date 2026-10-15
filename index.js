@@ -120,12 +120,11 @@ async function sendMainMenu(channel) {
   );
 
   const row4 = new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId('rob').setLabel('السرقة').setStyle(ButtonStyle.Danger).setEmoji('⚡'),
-  new ButtonBuilder().setCustomId('shop').setLabel('المتجر').setStyle(ButtonStyle.Success).setEmoji('🛍️'),
-  new ButtonBuilder().setCustomId('inventory').setLabel('مقتنياتي').setStyle(ButtonStyle.Primary).setEmoji('🎒'),
-  new ButtonBuilder().setCustomId('help').setLabel('المساعدة').setStyle(ButtonStyle.Secondary).setEmoji('❓')
-);
-
+    new ButtonBuilder().setCustomId('rob').setLabel('السرقة').setStyle(ButtonStyle.Danger).setEmoji('⚡'),
+    new ButtonBuilder().setCustomId('shop').setLabel('المتجر').setStyle(ButtonStyle.Success).setEmoji('🛍️'),
+    new ButtonBuilder().setCustomId('inventory').setLabel('مقتنياتي').setStyle(ButtonStyle.Primary).setEmoji('🎒'),
+    new ButtonBuilder().setCustomId('help').setLabel('المساعدة').setStyle(ButtonStyle.Secondary).setEmoji('❓')
+  );
 
   await channel.send({ embeds: [embed], components: [row1, row2, row3, row4] });
 }
@@ -283,6 +282,16 @@ client.on(Events.InteractionCreate, async interaction => {
         break;
       }
 
+      case 'rob': {
+        const embed = new EmbedBuilder()
+          .setColor('#e74c3c')
+          .setTitle('⚡ السرقة / النهب')
+          .setDescription('اكتب الأمر في الدردشة هكذا:\n`!سرقة @الشخص`\n\n📊 التفاصيل:\n• فرصة النجاح: 40%\n• نسبة المسروق: 15% من رصيده\n• فترة الانتظار: ساعة كاملة\n• لا يمكن سرقة من رصيده أقل من 50 دينار')
+          .setFooter({ text: 'انتبه: قد يتم اكتشافك وفشل محاولتك!' });
+        await interaction.reply({ embeds: [embed], ephemeral: false });
+        break;
+      }
+
       case 'shop': {
         const embed = new EmbedBuilder()
           .setColor('#27ae60')
@@ -319,17 +328,6 @@ client.on(Events.InteractionCreate, async interaction => {
           );
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
-        
-      case 'rob': {
-        const embed = new EmbedBuilder()
-          .setColor('#e74c3c')
-          .setTitle('⚡ السرقة / النهب')
-          .setDescription('اكتب الأمر في الدردشة هكذا:\n`!سرقة @الشخص`\n\n📊 التفاصيل:\n• فرصة النجاح: 40%\n• نسبة المسروق: 15% من رصيده\n• فترة الانتظار: ساعة كاملة\n• لا يمكن سرقة من رصيده أقل من 50 دينار')
-          .setFooter({ text: 'انتبه: قد يتم اكتشافك وفشل محاولتك!' });
-        await interaction.reply({ embeds: [embed], ephemeral: false });
-        break;
-      }
-
       }
     }
   } catch (e) {
@@ -379,6 +377,49 @@ client.on(Events.MessageCreate, async message => {
     user.balance += amount;
     saveData();
     await message.reply(`✅ تم سحب **${amount} دينار** من بنكك! 💳`);
+    return;
+  }
+
+  // !سرقة
+  if (content.startsWith('!سرقة ') || content.startsWith('!نهب ')) {
+    const target = message.mentions.users.first();
+    const user = ensureUser(message.author.id);
+    
+    if (!target) {
+      await message.reply('❌ اذكر الشخص الذي تريد سرقته مثال: `!سرقة @الشخص`');
+      return;
+    }
+    
+    if (target.id === message.author.id) {
+      await message.reply('❌ لا يمكنك سرقة نفسك!');
+      return;
+    }
+    
+    const targetUser = ensureUser(target.id);
+    
+    if (now - user.lastRob < ROB_COOLDOWN) {
+      const m = Math.ceil((ROB_COOLDOWN - (now - user.lastRob)) / 60000);
+      await message.reply(`⏳ انتظر **${m} دقيقة** قبل محاولة السرقة مرة أخرى`);
+      return;
+    }
+    
+    if (targetUser.balance < ROB_MIN_TARGET) {
+      await message.reply('❌ هذا الشخص لا يمتلك ما يكفي من المال لسرقته');
+      return;
+    }
+    
+    user.lastRob = now;
+    
+    if (Math.random() < ROB_CHANCE) {
+      const stolen = Math.floor(targetUser.balance * 0.15);
+      targetUser.balance -= stolen;
+      user.balance = Math.min(MAX_MONEY, user.balance + stolen);
+      saveData();
+      await message.reply(`✅ نجحت السرقة! حصلت على **${stolen} دينار** من ${target.username} 💰`);
+    } else {
+      saveData();
+      await message.reply(`❌ فشلت محاولتك! تم اكتشافك وهرب ${target.username} بسلام 😅`);
+    }
     return;
   }
 });
