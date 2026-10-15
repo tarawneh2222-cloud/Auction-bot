@@ -399,14 +399,17 @@ setInterval(() => refreshMarket().catch(e => console.error('Market refresh:', e)
 
 async function main() {
   await initDb();
-  app.listen(PORT, '0.0.0.0', () => console.log(`🌐 HTTP server listening on ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`🌐 HTTP server listening on port ${PORT}`));
   await client.login(TOKEN);
 }
 
-main().catch(e => { console.error('❌ Startup failed:', e); process.exit(1); });
+main().catch(e => {
+  console.error('❌ Startup failed:', e);
+  process.exit(1);
+});
 
 process.on('SIGTERM', async () => {
-  await client.destroy().catch(() => { });
+  await client.destroy().catch(() => {});
   process.exit(0);
 });
                                        
