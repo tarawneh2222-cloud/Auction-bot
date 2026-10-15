@@ -78,8 +78,12 @@ function readData() {
   initData();
   try {
     const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
-    if (!data.users) data.users = {};
-    if (!data.lottery) data.lottery = { pool: 1000, tickets: [] };
+    if (!data.users) {
+      data.users = {};
+    }
+    if (!data.lottery) {
+      data.lottery = { pool: 1000, tickets: [] };
+    }
     if (!data.market || !data.market.assets) {
       data.market = { assets: DEFAULT_MARKET_ASSETS, lastUpdate: Date.now() };
     }
@@ -122,16 +126,24 @@ function getUserData(userId) {
 }
 
 function checkAchievements(userId, user) {
-  if (!user.achievements) user.achievements = [];
+  if (!user.achievements) {
+    user.achievements = [];
+  }
   const rewards = [];
 
-  if ((user.balance + user.bank) >= 100000 && !user.achievements.includes('rich_100k')) {
+  const totalWealth = user.balance + user.bank;
+  if (totalWealth >= 100000 && !user.achievements.includes('rich_100k')) {
     user.achievements.push('rich_100k');
     user.balance += 5000;
     rewards.push('🏆 **أول 100,000$**: ربحت جائزة 5,000$!');
   }
 
-  const totalBiz = Object.values(user.businesses || {}).reduce((a, b) => a + b, 0);
+  let totalBiz = 0;
+  const bizObj = user.businesses || {};
+  for (const k in bizObj) {
+    totalBiz += bizObj[k];
+  }
+
   if (totalBiz >= 3 && !user.achievements.includes('biz_owner')) {
     user.achievements.push('biz_owner');
     user.balance += 3000;
@@ -161,11 +173,16 @@ function updateMarketPrices() {
       const currentPrice = data.market.assets[key].price;
       const changePercent = (Math.random() * 0.30) - 0.15;
       let newPrice = Math.round(currentPrice * (1 + changePercent));
-      if (newPrice < 500) newPrice = 500;
+      if (newPrice < 500) {
+        newPrice = 500;
+      }
 
       let trend = '📉';
-      if (newPrice > currentPrice) trend = '🟢';
-      else if (newPrice === currentPrice) trend = '🔄';
+      if (newPrice > currentPrice) {
+        trend = '🟢';
+      } else if (newPrice === currentPrice) {
+        trend = '🔄';
+      }
 
       data.market.assets[key].price = newPrice;
       data.market.assets[key].trend = trend;
@@ -191,7 +208,9 @@ client.once(Events.ClientReady, () => {
 
 // معالج الأوامر النصية
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot || !message.guild) return;
+  if (message.author.bot || !message.guild) {
+    return;
+  }
   const content = message.content.trim();
   const userId = message.author.id;
 
@@ -241,8 +260,9 @@ client.on(Events.MessageCreate, async message => {
     const now = Date.now();
     const cooldown = 15 * 60 * 1000;
 
-    if (now - (user.lastRob || 0) < cooldown) {
-      const rem = Math.ceil((cooldown - (now - user.lastRob)) / 1000 / 60);
+    const userLastRob = user.lastRob || 0;
+    if (now - userLastRob < cooldown) {
+      const rem = Math.ceil((cooldown - (now - userLastRob)) / 1000 / 60);
       await message.reply('⏳ أنت متعب ومطلوب أمنياً! انتظر **' + rem + ' دقيقة** قبل محاولة نهب أخرى.');
       return;
     }
@@ -376,7 +396,12 @@ client.on(Events.MessageCreate, async message => {
     const data = readData();
     const user = getUserData(userId);
     const args = content.split(' ');
-    let amount = args[1] === 'الكل' || args[1] === 'all' ? user.balance : parseInt(args[1]);
+    let amount = 0;
+    if (args[1] === 'الكل' || args[1] === 'all') {
+      amount = user.balance;
+    } else {
+      amount = parseInt(args[1]);
+    }
 
     if (isNaN(amount) || amount <= 0 || user.balance < amount) {
       await message.reply('❌ مبلغ غير صحيح أو رصيدك لا يكفي!');
@@ -394,7 +419,12 @@ client.on(Events.MessageCreate, async message => {
     const data = readData();
     const user = getUserData(userId);
     const args = content.split(' ');
-    let amount = args[1] === 'الكل' || args[1] === 'all' ? user.bank : parseInt(args[1]);
+    let amount = 0;
+    if (args[1] === 'الكل' || args[1] === 'all') {
+      amount = user.bank;
+    } else {
+      amount = parseInt(args[1]);
+    }
 
     if (isNaN(amount) || amount <= 0 || user.bank < amount) {
       await message.reply('❌ مبلغ غير صحيح أو رصيدك بالبنك لا يكفي!');
@@ -455,7 +485,9 @@ client.on(Events.MessageCreate, async message => {
     const data = readData();
     const user = getUserData(userId);
     const cost = 1000;
-    if (user.balance < cost) return message.reply('❌ درع الحماية يكلف 1,000$!');
+    if (user.balance < cost) {
+      return message.reply('❌ درع الحماية يكلف 1,000$!');
+    }
     user.balance -= cost;
     user.shieldUntil = Date.now() + (24 * 60 * 60 * 1000);
     data.users[userId] = user;
@@ -468,7 +500,9 @@ client.on(Events.MessageCreate, async message => {
     const data = readData();
     const user = getUserData(userId);
     const cost = 500;
-    if (user.balance < cost) return message.reply('❌ سعر الصندوق 500$!');
+    if (user.balance < cost) {
+      return message.reply('❌ سعر الصندوق 500$!');
+    }
     user.balance -= cost;
     user.lootboxes = (user.lootboxes || 0) + 1;
     data.users[userId] = user;
@@ -480,7 +514,9 @@ client.on(Events.MessageCreate, async message => {
   if (content === '!افتتح_صندوق' || content === '!فتح_صندوق') {
     const data = readData();
     const user = getUserData(userId);
-    if (!user.lootboxes || user.lootboxes <= 0) return message.reply('❌ لا تملك صناديق! اشترِ واحداً بـ 500$.');
+    if (!user.lootboxes || user.lootboxes <= 0) {
+      return message.reply('❌ لا تملك صناديق! اشترِ واحداً بـ 500$.');
+    }
     user.lootboxes -= 1;
     const prizes = [100, 300, 600, 1000, 2500, 5000];
     const prize = prizes[Math.floor(Math.random() * prizes.length)];
@@ -507,13 +543,19 @@ client.on(Events.MessageCreate, async message => {
 
   if (content.startsWith('!اشتري_رتبة')) {
     const roleName = content.split(' ')[1];
-    if (!SHOP_ROLES[roleName]) return message.reply('❌ اسم الرتبة غير صحيح! اكتب `!رتب`.');
+    if (!SHOP_ROLES[roleName]) {
+      return message.reply('❌ اسم الرتبة غير صحيح! اكتب `!رتب`.');
+    }
     const data = readData();
     const user = getUserData(userId);
     const price = SHOP_ROLES[roleName];
-    if (user.balance < price) return message.reply('❌ رصيدك لا يكفي لشراء رتبة ' + roleName + '!');
+    if (user.balance < price) {
+      return message.reply('❌ رصيدك لا يكفي لشراء رتبة ' + roleName + '!');
+    }
     const role = message.guild.roles.cache.find(r => r.name === roleName);
-    if (!role) return message.reply('⚠️ لم أجد رتبة باسم **' + roleName + '** في السيرفر! أنشئها أولاً.');
+    if (!role) {
+      return message.reply('⚠️ لم أجد رتبة باسم **' + roleName + '** في السيرفر! أنشئها أولاً.');
+    }
     user.balance -= price;
     data.users[userId] = user;
     saveData(data);
@@ -531,7 +573,9 @@ client.on(Events.MessageCreate, async message => {
     const data = readData();
     const user = getUserData(userId);
     const today = new Date().toDateString();
-    if (user.dailyLast === today) return message.reply('⏳ حصلت على مكافأتك اليومية بالفعل!');
+    if (user.dailyLast === today) {
+      return message.reply('⏳ حصلت على مكافأتك اليومية بالفعل!');
+    }
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (user.dailyLast === yesterday.toDateString()) {
@@ -551,10 +595,14 @@ client.on(Events.MessageCreate, async message => {
   // 🎰 سلوتس والألعاب
   if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
     const bet = parseInt(content.split(' ')[1]);
-    if (isNaN(bet) || bet <= 0) return message.reply('❌ حدد مبلغ الرهان: `!سلوتس 100`');
+    if (isNaN(bet) || bet <= 0) {
+      return message.reply('❌ حدد مبلغ الرهان: `!سلوتس 100`');
+    }
     const data = readData();
     const user = getUserData(userId);
-    if (user.balance < bet) return message.reply('❌ رصيدك لا يكفي للرهان!');
+    if (user.balance < bet) {
+      return message.reply('❌ رصيدك لا يكفي للرهان!');
+    }
     user.balance -= bet;
     const symbols = ['🍒', '💎', '🍋', '🔔'];
     const r1 = symbols[Math.floor(Math.random() * symbols.length)];
@@ -588,7 +636,9 @@ client.on(Events.MessageCreate, async message => {
     }
     const data = readData();
     const user = getUserData(userId);
-    if (user.balance < bet) return message.reply('❌ رصيدك لا يكفي!');
+    if (user.balance < bet) {
+      return message.reply('❌ رصيدك لا يكفي!');
+    }
     user.balance -= bet;
     const winningNumber = Math.floor(Math.random() * 10) + 1;
     if (guess === winningNumber) {
@@ -607,10 +657,14 @@ client.on(Events.MessageCreate, async message => {
 
   if (content.startsWith('!سباق')) {
     const bet = parseInt(content.split(' ')[1]);
-    if (isNaN(bet) || bet <= 0) return message.reply('❌ الاستخدام: `!سباق [المبلغ]`');
+    if (isNaN(bet) || bet <= 0) {
+      return message.reply('❌ الاستخدام: `!سباق [المبلغ]`');
+    }
     const data = readData();
     const user = getUserData(userId);
-    if (user.balance < bet) return message.reply('❌ رصيدك لا يكفي!');
+    if (user.balance < bet) {
+      return message.reply('❌ رصيدك لا يكفي!');
+    }
     user.balance -= bet;
     const cars = ['🏎️ الفيراري', '🚙 الجيب', '🚗 السريعة'];
     const winner = cars[Math.floor(Math.random() * cars.length)];
@@ -653,11 +707,15 @@ client.on(Events.MessageCreate, async message => {
   if (content.startsWith('!تبني')) {
     const petType = content.split(' ')[1] ? content.split(' ')[1].toLowerCase() : '';
     const pKey = { 'كلب': 'dog', 'قطة': 'cat', 'تنين': 'dragon', 'dog': 'dog', 'cat': 'cat', 'dragon': 'dragon' }[petType];
-    if (!pKey) return message.reply('❌ اختر حيواناً صحيحاً: كلب، قطة، تنين.');
+    if (!pKey) {
+      return message.reply('❌ اختر حيواناً صحيحاً: كلب، قطة، تنين.');
+    }
     const data = readData();
     const user = getUserData(userId);
     const petObj = PETS[pKey];
-    if (user.balance < petObj.cost) return message.reply('❌ تكلفته ' + petObj.cost.toLocaleString() + '$!');
+    if (user.balance < petObj.cost) {
+      return message.reply('❌ تكلفته ' + petObj.cost.toLocaleString() + '$!');
+    }
     user.balance -= petObj.cost;
     user.pet = pKey;
     checkAchievements(userId, user);
@@ -670,11 +728,14 @@ client.on(Events.MessageCreate, async message => {
   if (content === '!رحلة' || content === '!رحلة_كنز') {
     const data = readData();
     const user = getUserData(userId);
-    if (!user.pet) return message.reply('❌ لا تملك حيواناً أليفاً!');
+    if (!user.pet) {
+      return message.reply('❌ لا تملك حيواناً أليفاً!');
+    }
     const now = Date.now();
     const cooldown = 2 * 60 * 60 * 1000;
-    if (now - (user.lastPetHunt || 0) < cooldown) {
-      const rem = Math.ceil((cooldown - (now - user.lastPetHunt)) / 1000 / 60);
+    const lastHunt = user.lastPetHunt || 0;
+    if (now - lastHunt < cooldown) {
+      const rem = Math.ceil((cooldown - (now - lastHunt)) / 1000 / 60);
       return message.reply('⏳ حيوانك متعب! انتظر **' + rem + ' دقيقة**.');
     }
     const petObj = PETS[user.pet];
@@ -690,11 +751,17 @@ client.on(Events.MessageCreate, async message => {
   // 💍 الزواج
   if (content.startsWith('!زواج')) {
     const target = message.mentions.users.first();
-    if (!target || target.id === userId || target.bot) return message.reply('❌ منشن الشخص المطلوب: `!زواج @الشخص`');
+    if (!target || target.id === userId || target.bot) {
+      return message.reply('❌ منشن الشخص المطلوب: `!زواج @الشخص`');
+    }
     const user = getUserData(userId);
     const targetData = getUserData(target.id);
-    if (user.spouse) return message.reply('❌ أنت متزوج بالفعل!');
-    if (targetData.spouse) return message.reply('❌ الشخص المستهدف متزوج!');
+    if (user.spouse) {
+      return message.reply('❌ أنت متزوج بالفعل!');
+    }
+    if (targetData.spouse) {
+      return message.reply('❌ الشخص المستهدف متزوج!');
+    }
     pendingMarriages.set(target.id, userId);
     await message.reply('💍 <@' + target.id + '>، طلب <@' + userId + '> الزواج منك! اكتب `!قبول` للموافقة.');
     return;
@@ -702,7 +769,9 @@ client.on(Events.MessageCreate, async message => {
 
   if (content === '!قبول' || content === '!موافقة') {
     const proposerId = pendingMarriages.get(userId);
-    if (!proposerId) return message.reply('❌ لا توجد طلبات زواج معلقة!');
+    if (!proposerId) {
+      return message.reply('❌ لا توجد طلبات زواج معلقة!');
+    }
     const data = readData();
     const user = getUserData(userId);
     const proposerData = getUserData(proposerId);
@@ -737,15 +806,21 @@ client.on(Events.MessageCreate, async message => {
   if (content.startsWith('!شراء_مشروع')) {
     const type = content.split(' ')[1] ? content.split(' ')[1].toLowerCase() : '';
     const pKey = { 'مقهى': 'cafe', 'بنزين': 'gas', 'تكنولوجيا': 'tech', 'مصنع': 'factory', 'عقارات': 'realestate' }[type];
-    if (!pKey) return message.reply('❌ اختر مشروعاً صحيحاً (مقهى، بنزين، تكنولوجيا، مصنع، عقارات)!');
+    if (!pKey) {
+      return message.reply('❌ اختر مشروعاً صحيحاً (مقهى، بنزين، تكنولوجيا، مصنع، عقارات)!');
+    }
 
     const data = readData();
     const user = getUserData(userId);
     const proj = BUSINESSES[pKey];
-    if (user.balance < proj.cost) return message.reply('❌ رصيدك لا يكفي! يكلف **' + proj.cost.toLocaleString() + '$**.');
+    if (user.balance < proj.cost) {
+      return message.reply('❌ رصيدك لا يكفي! يكلف **' + proj.cost.toLocaleString() + '$**.');
+    }
 
     user.balance -= proj.cost;
-    if (!user.businesses) user.businesses = {};
+    if (!user.businesses) {
+      user.businesses = {};
+    }
     user.businesses[pKey] = (user.businesses[pKey] || 0) + 1;
     data.users[userId] = user;
     saveData(data);
@@ -760,11 +835,15 @@ client.on(Events.MessageCreate, async message => {
     const last = user.lastClaimedIncome || now;
     const hours = (now - last) / (1000 * 60 * 60);
 
-    if (hours < 0.05) return message.reply('⏳ لم تتراكم أرباح كافية بعد!');
+    if (hours < 0.05) {
+      return message.reply('⏳ لم تتراكم أرباح كافية بعد!');
+    }
 
     const b = user.businesses || {};
-    const hourly = (b.cafe * 100) + (b.gas * 350) + (b.tech * 1200) + (b.factory * 3000) + (b.realestate * 8000);
-    if (hourly === 0) return message.reply('❌ لا تملك أي مشاريع لجمع أرباحها!');
+    const hourly = ((b.cafe || 0) * 100) + ((b.gas || 0) * 350) + ((b.tech || 0) * 1200) + ((b.factory || 0) * 3000) + ((b.realestate || 0) * 8000);
+    if (hourly === 0) {
+      return message.reply('❌ لا تملك أي مشاريع لجمع أرباحها!');
+    }
 
     const total = Math.floor(hourly * hours);
     user.balance += total;
@@ -785,14 +864,16 @@ client.on(Events.MessageCreate, async message => {
     let desc = '';
     users.forEach((u, i) => {
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-      desc += medal + ' <@' + u.id + '> — **' + u.total.toLocaleString() + '** $\n'; });      const embed = new EmbedBuilder() .setTitle('🏆 أغنى اللاعبين') .setDescription(desc \vert{}\vert{} 'لا توجد بيانات') .setColor('#f1c40f');      await message.reply({ embeds: [embed] }); return; } });  // 🔘 معالج الأزرار والقوائم التفاعلية المباشرة client.on(Events.InteractionCreate, async interaction => { const userId = interaction.user.id; const data = readData(); const user = getUserData(userId);    // معالجة القائمة المنسدلة لشراء الأصول if (interaction.isStringSelectMenu() && interaction.customId === 'select_buy_asset') { const selected = interaction.values[0]; const key = selected.replace('buy_', '');      if (!data.market.assets[key]) { await interaction.reply({ content: '❌ حدث خطأ، لم يتم العثور على الأصل!', ephemeral: true }); return; }      const asset = data.market.assets[key];      if (user.balance < asset.price) { await interaction.reply({ content: '❌ رصيدك النقدي الحالي (**' + user.balance.toLocaleString() + '$**) لا يكفي لشراء **' + asset.name + '** (' + asset.price.toLocaleString() + '$)!',
+      desc += medal + ' <@' + u.id + '> — **' + u.total.toLocaleString() + '** $\n'; });      let embedDesc = 'لا توجد بيانات'; if (desc.length > 0) { embedDesc = desc; }      const embed = new EmbedBuilder() .setTitle('🏆 أغنى اللاعبين') .setDescription(embedDesc) .setColor('#f1c40f');      await message.reply({ embeds: [embed] }); return; } });  // 🔘 معالج الأزرار والقوائم التفاعلية المباشرة client.on(Events.InteractionCreate, async interaction => { const userId = interaction.user.id; const data = readData(); const user = getUserData(userId);    // معالجة القائمة المنسدلة لشراء الأصول if (interaction.isStringSelectMenu() && interaction.customId === 'select_buy_asset') { const selected = interaction.values[0]; const key = selected.replace('buy_', '');      if (!data.market.assets[key]) { await interaction.reply({ content: '❌ حدث خطأ، لم يتم العثور على الأصل!', ephemeral: true }); return; }      const asset = data.market.assets[key];      if (user.balance < asset.price) { await interaction.reply({ content: '❌ رصيدك النقدي الحالي (**' + user.balance.toLocaleString() + '$**) لا يكفي لشراء **' + asset.name + '** (' + asset.price.toLocaleString() + '$)!',
         ephemeral: true
       });
       return;
     }
 
     user.balance -= asset.price;
-    if (!user.assets) user.assets = {};
+    if (!user.assets) {
+      user.assets = {};
+    }
     user.assets[key] = (user.assets[key] || 0) + 1;
 
     data.users[userId] = user;
@@ -805,13 +886,15 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  if (!interaction.isButton()) return;
+  if (!interaction.isButton()) {
+    return;
+  }
 
   try {
     switch (interaction.customId) {
       case 'btn_account':
         await interaction.reply({
-          content: '💳 **حسابك الشخصي:**\n• 💰 النقدي: **' + user.balance.toLocaleString() + '$**\n• 🏦 البنك: **' + user.bank.toLocaleString() + '$**\n• 🛡️ الحماية: **' + (user.shieldUntil > Date.now() ? 'نشطة ✅' : 'غير نشطة ❌') + '**',
+          content: '💳 **حسابك الشخصي:**\n• 💰 النقدي: **' + user.balance.toLocaleString() + '$**\n• 🏦 البنك: **' + user.bank.toLocaleString() + '$**\n• 🛡️ الحماية: **' + ((user.shieldUntil || 0) > Date.now() ? 'نشطة ✅' : 'غير نشطة ❌') + '**',
           ephemeral: true
         });
         break;
@@ -824,7 +907,11 @@ client.on(Events.MessageCreate, async message => {
         }
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        user.dailyStreak = (user.dailyLast === yesterday.toDateString()) ? (user.dailyStreak || 0) + 1 : 1;
+        if (user.dailyLast === yesterday.toDateString()) {
+          user.dailyStreak = (user.dailyStreak || 0) + 1;
+        } else {
+          user.dailyStreak = 1;
+        }
         const totalAmount = 250 + ((user.dailyStreak - 1) * 50);
         user.balance += totalAmount;
         user.dailyLast = today;
@@ -882,7 +969,9 @@ client.on(Events.MessageCreate, async message => {
             portTxt += '• ' + data.market.assets[k].name + ': **' + ast[k] + '**\n';
           }
         }
-        if (portTxt === '📈 **محفظة أصولك المملوكة:**\n') portTxt += 'لا تملك أي أصول حالياً! تصفح `!سوق`.';
+        if (portTxt === '📈 **محفظة أصولك المملوكة:**\n') {
+          portTxt += 'لا تملك أي أصول حالياً! تصفح `!سوق`.';
+        }
         await interaction.reply({ content: portTxt, ephemeral: true });
         break;
       }
