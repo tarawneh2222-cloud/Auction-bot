@@ -45,6 +45,13 @@ const BUSINESSES = {
   realestate: { name: 'شركة عقارات 🏙️', cost: 300000, incomePerHour: 8000 }
 };
 
+// 🐾 الحيوانات الأليفة
+const PETS = {
+  dog: { name: 'كلب 🐶', cost: 2000, minFind: 100, maxFind: 500 },
+  cat: { name: 'قطة 🐱', cost: 1500, minFind: 80, maxFind: 400 },
+  dragon: { name: 'تنين أسطوري 🐲', cost: 20000, minFind: 1000, maxFind: 4000 }
+};
+
 function initDatabase() {
   if (!fs.existsSync(DATA_PATH)) {
     fs.writeFileSync(DATA_PATH, JSON.stringify({ users: {} }, null, 2));
@@ -77,7 +84,9 @@ function getUserData(userId) {
       dailyStreak: 0,
       assets: { phones: 0, cars: 0, stocks: 0, lands: 0 },
       businesses: { cafe: 0, gas: 0, tech: 0, factory: 0, realestate: 0 },
-      lastClaimedIncome: Date.now()
+      lastClaimedIncome: Date.now(),
+      pet: null,
+      lastPetHunt: 0
     };
     saveData(db);
   }
@@ -118,6 +127,7 @@ client.on(Events.MessageCreate, async message => {
     const row2 = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('btn_market').setLabel('📊 السوق').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('btn_businesses').setLabel('🏢 المشاريع').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('btn_pets').setLabel('🐾 الحيوانات').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('btn_games').setLabel('🎰 الألعاب').setStyle(ButtonStyle.Danger)
     );
 
@@ -131,10 +141,11 @@ client.on(Events.MessageCreate, async message => {
       .setTitle('📜 قائمة الأوامر الاقتصادية')
       .addFields(
         { name: '🏛️ القائمة العامة', value: '`!قائمة` لعرض لوحة التحكم بالأزرار' },
-        { name: '💳 الحساب والبنك', value: '`!حساب` | `!إيداع [مبلغ]` | `!سحب [مبلغ]`' },
-        { name: '🏢 المشاريع والاستثمار', value: '`!مشاريع` لعرض الشراء | `!ارباح` لجمع الأرباح' },
+        { name: '💳 الحساب والبنك', value: '`!حساب` | `!إيداع [مبلغ]` | `!سحب [مبلغ]` | `!تحويل @الشخص [مبلغ]`' },
+        { name: '🏢 المشاريع والاستثمار', value: '`!مشاريع` لشراء المشاريع | `!ارباح` لجمع أرباحك' },
+        { name: '🐾 الحيوانات الأليفة', value: '`!الحيوانات` للتبني | `!رحلة` لجلب الأموال والكنوز' },
         { name: '📊 السوق والبورصة', value: '`!سوق` لشراء الأصول من القائمة المنسدلة' },
-        { name: '🎰 الألعاب', value: '`!سلوتس [المبلغ]` للعب الحظ' }
+        { name: '🎰 الألعاب والترفيه', value: '`!سلوتس [مبلغ]` | `!تخمين [1-10] [مبلغ]`' }
       )
       .setColor('#3498db');
     await message.reply({ embeds: [embed] });
@@ -144,11 +155,14 @@ client.on(Events.MessageCreate, async message => {
   // 💳 الحساب الشخصي
   if (content === '!حساب' || content === '!حسابي') {
     const user = getUserData(userId);
+    const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
+
     const embed = new EmbedBuilder()
       .setTitle(`💳 حساب اللاعب: ${message.author.username}`)
       .addFields(
         { name: '💰 النقدي', value: `${user.balance.toLocaleString()}$`, inline: true },
         { name: '🏦 البنك', value: `${user.bank.toLocaleString()}$`, inline: true },
+        { name: '🐾 الحيوان الأليف', value: petName, inline: true },
         { name: '🔥 الستريك اليومي', value: `${user.dailyStreak || 0} أيام`, inline: true }
       )
       .setColor('#2ecc71');
@@ -197,7 +211,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏦 الإيداع والسحب
+  // 🏦 الإيداع والسحب والتحويل
   if (content.startsWith('!إيداع')) {
     const args = content.split(' ');
     const db = readData();
@@ -238,7 +252,110 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🏢 عرض المشاريع والشراء
+  if (content.startsWith('!تحويل')) {
+    const target = message.mentions.users.first();
+    const args = content.split(' ');
+    const amount = parseInt(args[2]);
+
+    if (!target || target.id === userId || target.bot || isNaN(amount) || amount <= 0) {
+      await message.reply('❌ طريقة الاستخدام الصحيحة: `!تحويل @الشخص [المبلغ]`');
+      return;
+    }
+
+    const db = readData();
+    const user = getUserData(userId);
+    const targetData = getUserData(target.id);
+
+    if (user.balance < amount) {
+      await message.reply('❌ لا تملك هذا المبلغ نقداً في محفظتك!');
+      return;
+    }
+
+    user.balance -= amount;
+    targetData.balance += amount;
+    db.users[userId] = user;
+    db.users[target.id] = targetData;
+    saveData(db);
+
+    await message.reply(`✅ تم تحويل **${amount.toLocaleString()}$** بنجاح إلى <@${target.id}>! 💸`);
+    return;
+  }
+
+  // 🐾 متجر الحيوانات وتبنيها والرحلات
+  if (content === '!الحيوانات' || content === '!حيوانات') {
+    const embed = new EmbedBuilder()
+      .setTitle('🐾 متجر الحيوانات الأليفة')
+      .setDescription('تبنى حيواناً أليفاً ليرسلك في رحلات استكشافية يجلب لك منها الكنوز والأموال!')
+      .addFields(
+        { name: '🐶 كلب (2,000$)', value: 'يجلب من الرحلة: 100$ - 500$\nالأمر: `!تبني كلب`', inline: false },
+        { name: '🐱 قطة (1,500$)', value: 'تجد من الرحلة: 80$ - 400$\nالأمر: `!تبني قطة`', inline: false },
+        { name: '🐲 تنين أسطوري (20,000$)', value: 'يجلب من الرحلة: 1000$ - 4000$\nالأمر: `!تبني تنين`', inline: false }
+      )
+      .setColor('#e67e22');
+
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  if (content.startsWith('!تبني')) {
+    const type = content.split(' ')[1] ? content.split(' ')[1].toLowerCase() : '';
+    const mapKey = { 'كلب': 'dog', 'قطة': 'cat', 'تنين': 'dragon', 'dog': 'dog', 'cat': 'cat', 'dragon': 'dragon' }[type];
+
+    if (!mapKey) {
+      await message.reply('❌ اختر حيواناً صحيحاً: `كلب` | `قطة` | `تنين`');
+      return;
+    }
+
+    const db = readData();
+    const user = getUserData(userId);
+    const petObj = PETS[mapKey];
+
+    if (user.balance < petObj.cost) {
+      await message.reply(`❌ رصيدك لا يكفي! تكلفة تبني **${petObj.name}** هي **${petObj.cost.toLocaleString()}$**.`);
+      return;
+    }
+
+    user.balance -= petObj.cost;
+    user.pet = mapKey;
+    db.users[userId] = user;
+    saveData(db);
+
+    await message.reply(`🎉 **مبروك!** تبنيت **${petObj.name}** بنجاح! استخدم الأمر \`!رحلة\` لإرساله لجلب الكنوز.`);
+    return;
+  }
+
+  if (content === '!رحلة' || content === '!رحلة_كنز') {
+    const db = readData();
+    const user = getUserData(userId);
+
+    if (!user.pet || !PETS[user.pet]) {
+      await message.reply('❌ أنت لا تملك حيواناً أليفاً! اكتب `!الحيوانات` لتبني واحد.');
+      return;
+    }
+
+    const now = Date.now();
+    const cooldown = 1 * 60 * 60 * 1000; // مهلة ساعة واحدة
+    const lastHunt = user.lastPetHunt || 0;
+
+    if (now - lastHunt < cooldown) {
+      const remMinutes = Math.ceil((cooldown - (now - lastHunt)) / (1000 * 60));
+      await message.reply(`⏳ حيوانك الأليف متعب الآن! انتظر **${remMinutes} دقيقة** قبل الرحلة القادمة.`);
+      return;
+    }
+
+    const petObj = PETS[user.pet];
+    const prize = Math.floor(Math.random() * (petObj.maxFind - petObj.minFind + 1)) + petObj.minFind;
+
+    user.balance += prize;
+    user.lastPetHunt = now;
+    db.users[userId] = user;
+    saveData(db);
+
+    await message.reply(`🗺️ عاد **${petObj.name}** من رحلته الاستكشافية وجلب لك **${prize.toLocaleString()}$**! 💰✨`);
+    return;
+  }
+
+  // 🏢 المشاريع والأرباح
   if (content === '!مشاريع') {
     const user = getUserData(userId);
     const b = user.businesses || {};
@@ -287,7 +404,6 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 💵 جمع الأرباح
   if (content === '!ارباح' || content === '!أرباح') {
     const db = readData();
     const user = getUserData(userId);
@@ -347,7 +463,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // 🎰 لعبة السلوتس
+  // 🎰 الألعاب (سلوتس وتخمين)
   if (content.startsWith('!سلوتس') || content.startsWith('!slots')) {
     const args = content.split(' ');
     const bet = parseInt(args[1]);
@@ -388,6 +504,41 @@ client.on(Events.MessageCreate, async message => {
     saveData(db);
 
     await message.reply(`🎰 **[ ${s1} \vert{}${s2} | ${s3} ]**\n\n${resultText}`);
+    return;
+  }
+
+  if (content.startsWith('!تخمين')) {
+    const args = content.split(' ');
+    const guess = parseInt(args[1]);
+    const bet = parseInt(args[2]);
+
+    if (isNaN(guess) || guess < 1 || guess > 10 || isNaN(bet) || bet <= 0) {
+      await message.reply('❌ طريقة الاستخدام: `!تخمين [الرقم من 1-10] [مبلغ الرهان]`\nمثال: `!تخمين 5 100`');
+      return;
+    }
+
+    const db = readData();
+    const user = getUserData(userId);
+
+    if (user.balance < bet) {
+      await message.reply('❌ رصيدك النقدي لا يكفي للرهان!');
+      return;
+    }
+
+    const winningNumber = Math.floor(Math.random() * 10) + 1;
+    user.balance -= bet;
+
+    if (guess === winningNumber) {
+      const prize = bet * 8;
+      user.balance += prize;
+      db.users[userId] = user;
+      saveData(db);
+      await message.reply(`🎯 **أصبت الرقم الصحيح (${winningNumber})!** ربحت **${prize.toLocaleString()}$**! 🔥`);
+    } else {
+      db.users[userId] = user;
+      saveData(db);
+      await message.reply(`❌ **خمنت الرقم ${guess}** ولكن الرقم الصحيح كان **${winningNumber}**. خسرت الرهان.`);
+    }
     return;
   }
 });
@@ -432,12 +583,14 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
     switch (interaction.customId) {
-      case 'btn_account':
+      case 'btn_account': {
+        const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
         await interaction.reply({
-          content: `💳 **حسابك الشخصي:**\n• 💰 النقدي: **${user.balance.toLocaleString()}$**\n• 🏦 البنك: **${user.bank.toLocaleString()}$**`,
+          content: `💳 **حسابك الشخصي:**\n• 💰 النقدي: **${user.balance.toLocaleString()}$**\n• 🏦 البنك: **${user.bank.toLocaleString()}$**\n• 🐾 الحيوان الأليف: **${petName}**`,
           ephemeral: true
         });
         break;
+      }
 
       case 'btn_daily': {
         const today = new Date().toDateString();
@@ -496,12 +649,21 @@ client.on(Events.InteractionCreate, async interaction => {
         break;
       }
 
+      case 'btn_pets': {
+        const petName = user.pet && PETS[user.pet] ? PETS[user.pet].name : 'لا يوجد ❌';
+        await interaction.reply({
+          content: `🐾 **حالة الحيوان الأليف:**\nالحيوان الحالي: **${petName}**\n• لتبني حيوان جديد اكتب: \`!الحيوانات\`\n• لإرساله في رحلة كنز اكتب: \`!رحلة\``,
+          ephemeral: true
+        });
+        break;
+      }
+
       case 'btn_market':
         await interaction.reply({ content: '📊 لعرض السوق والشراء التفاعلي اكتب: `!سوق`', ephemeral: true });
         break;
 
       case 'btn_games':
-        await interaction.reply({ content: '🎰 الألعاب المتاحة حالياً: `!سلوتس [المبلغ]`', ephemeral: true });
+        await interaction.reply({ content: '🎰 الألعاب المتاحة حالياً:\n• `!سلوتس [المبلغ]`\n• `!تخمين [الرقم من 1-10] [المبلغ]`', ephemeral: true });
         break;
 
       default:
