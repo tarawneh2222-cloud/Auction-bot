@@ -68,8 +68,10 @@ function getUserData(userId) {
       balance: 1000,
       bank: 0,
       stocks: { gold: 0, oil: 0, wheat: 0 },
-      dailyLast: 0,
-      gamesPlayed: 0
+      dailyLast: '',
+      gamesPlayed: 0,
+      lastJob: {},
+      lastRob: 0
     };
   }
   return data.users[userId];
@@ -132,17 +134,21 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // مساعدة
+  // مساعدة الأوامر
   if (content === '!مساعدة' || content === '!اوامر') {
     const embed = new EmbedBuilder()
       .setTitle('📜 قائمة الأوامر')
       .addFields(
-        { name: '!قائمة', value: 'عرض القائمة الرئيسية مع جميع الخيارات' },
-        { name: '!حساب', value: 'عرض رصيدك ومعلومات حسابك' },
-        { name: '!بنك', value: 'إيداع وسحب من البنك' },
-        { name: '!يومية', value: 'الحصول على مكافأتك اليومية' },
-        { name: '!سوق', value: 'أسعار الأسهم والمعادن' },
-        { name: '!الترتيب', value: 'أغنى اللاعبين' }
+        { name: '!قائمة', value: 'عرض القائمة الرئيسية مع الأزرار' },
+        { name: '!حساب', value: 'عرض رصيدك النقدي وفي البنك' },
+        { name: '!إيداع [المبلغ]', value: 'إيداع أموال في البنك' },
+        { name: '!سحب [المبلغ]', value: 'سحب أموال من البنك' },
+        { name: '!يومية', value: 'استلام المكافأة اليومية' },
+        { name: '!عمل [منجم/مزارع/متجر]', value: 'العمل لكسب المال' },
+        { name: '!نرد', value: 'لعبة رمي النرد (مضاعفة الأموال)' },
+        { name: '!نهب @الشخص', value: 'محاولة نهب أموال مستخدم آخر 🦹' },
+        { name: '!سوق', value: 'عرض أسعار السوق والأسهم' },
+        { name: '!الترتيب', value: 'عرض قائمة أغنى اللاعبين' }
       )
       .setColor('#2ecc71');
     await message.reply({ embeds: [embed] });
@@ -164,6 +170,70 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
+  // الإيداع في البنك (!إيداع 500 أو !إيداع الكل)
+  if (content.startsWith('!إيداع')) {
+    const data = readData();
+    const user = getUserData(userId);
+    const args = content.split(' ');
+    
+    let amount = 0;
+    if (args[1] === 'الكل' || args[1] === 'all') {
+      amount = user.balance;
+    } else {
+      amount = parseInt(args[1]);
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      await message.reply('❌ يرجى تحديد مبلغ صحيح للإيداع! مثال: `!إيداع 500` أو `!إيداع الكل`');
+      return;
+    }
+
+    if (user.balance < amount) {
+      await message.reply('❌ ليس لديك هذا المبلغ النقدي في محفظتك!');
+      return;
+    }
+
+    user.balance -= amount;
+    user.bank += amount;
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`✅ تم إيداع **${amount} دولار** في البنك بنجاح! 🏦`);
+    return;
+  }
+
+  // السحب من البنك (!سحب 500 أو !سحب الكل)
+  if (content.startsWith('!سحب')) {
+    const data = readData();
+    const user = getUserData(userId);
+    const args = content.split(' ');
+
+    let amount = 0;
+    if (args[1] === 'الكل' || args[1] === 'all') {
+      amount = user.bank;
+    } else {
+      amount = parseInt(args[1]);
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      await message.reply('❌ يرجى تحديد مبلغ صحيح للسحب! مثال: `!سحب 500` أو `!سحب الكل`');
+      return;
+    }
+
+    if (user.bank < amount) {
+      await message.reply('❌ ليس لديك هذا المبلغ في البنك!');
+      return;
+    }
+
+    user.bank -= amount;
+    user.balance += amount;
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`✅ تم سحب **${amount} دولار** من البنك إلى رصيدك النقدي بنجاح! 💰`);
+    return;
+  }
+
   // المكافأة اليومية
   if (content === '!يومية' || content === '!يومي') {
     const data = readData();
@@ -181,7 +251,147 @@ client.on(Events.MessageCreate, async message => {
     data.users[userId] = user;
     saveData(data);
     
-    await message.reply(`🎁 **تهانينا!** حصلت على مكافأتك اليومية بقيمة **${amount} دولار**!💰`);
+    await message.reply(`🎁 **تهانينا!** حصلت على مكافأتك اليومية بقيمة **${amount} دولار**! 💰`);
+    return;
+  }
+
+  // نظام الوظائف (!عمل منجم / مزارع / متجر)
+  if (content.startsWith('!عمل')) {
+    const data = readData();
+    const user = getUserData(userId);
+    const args = content.split(' ');
+    const jobType = args[1];
+
+    const now = Date.now();
+    const cooldown = 5 * 60 * 1000; // 5 دقائق كولداون
+
+    if (!user.lastJob) user.lastJob = {};
+    if (user.lastJob[jobType] && now - user.lastJob[jobType] < cooldown) {
+      const remaining = Math.ceil((cooldown - (now - user.lastJob[jobType])) / 1000 / 60);
+      await message.reply(`⏳ أنت متعب! يجب الانتظار **${remaining} دقائق** قبل العمل في هذه الوظيفة مجدداً.`);
+      return;
+    }
+
+    let min = 0, max = 0, jobName = '';
+    if (jobType === 'منجم') { min = 50; max = 150; jobName = 'منجم ⛏️'; }
+    else if (jobType === 'مزارع') { min = 40; max = 120; jobName = 'مزارع 🌾'; }
+    else if (jobType === 'متجر') { min = 60; max = 180; jobName = 'متجر 🛒'; }
+    else {
+      await message.reply('❌ الوظائف المتاحة:\n`!عمل منجم` (50-150$)\n`!عمل مزارع` (40-120$)\n`!عمل متجر` (60-180$)');
+      return;
+    }
+
+    const earned = Math.floor(Math.random() * (max - min + 1)) + min;
+    user.balance += earned;
+    user.lastJob[jobType] = now;
+    data.users[userId] = user;
+    saveData(data);
+
+    await message.reply(`💼 عملت بنجاح كـ **${jobName}** وكسبت **${earned} دولار**! 💵`);
+    return;
+  }
+
+  // لعبة النرد (!نرد)
+  if (content === '!نرد') {
+    const data = readData();
+    const user = getUserData(userId);
+    const cost = 100;
+
+    if (user.balance < cost) {
+      await message.reply(`❌ تحتاج إلى **${cost} دولار** نقداً على الأقل للعب النرد!`);
+      return;
+    }
+
+    user.balance -= cost;
+    const playerRoll = Math.floor(Math.random() * 6) + 1;
+    const botRoll = Math.floor(Math.random() * 6) + 1;
+
+    if (playerRoll > botRoll) {
+      const prize = cost * 2;
+      user.balance += prize;
+      data.users[userId] = user;
+      saveData(data);
+      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n🎉 **فزت!** حصلت على **${prize} دولار**! 💰`);
+    } else if (playerRoll === botRoll) {
+      user.balance += cost; // استرجاع المبلغ
+      data.users[userId] = user;
+      saveData(data);
+      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n🤝 **تعادل!** تم استرجاع الـ ${cost} دولار.`);
+    } else {
+      data.users[userId] = user;
+      saveData(data);
+      await message.reply(`🎲 رميت النرد: **${playerRoll}** | البوت رمى: **${botRoll}**\n😢 **خسرت!** ذهبت الـ ${cost} دولار.`);
+    }
+    return;
+  }
+
+  // نظام النهب / السرقة الجديد (!نهب @الشخص)
+  if (content.startsWith('!نهب') || content.startsWith('!سرقة')) {
+    const target = message.mentions.users.first();
+    if (!target) {
+      await message.reply('❌ يرجى منشن الشخص الذي تريد نهبه! مثال: `!نهب @الشخص`');
+      return;
+    }
+    if (target.id === userId) {
+      await message.reply('❌ لا يمكنك نهب نفسك يا فالح! 😂');
+      return;
+    }
+    if (target.bot) {
+      await message.reply('❌ لا يمكنك نهب البوتات!');
+      return;
+    }
+
+    const data = readData();
+    const user = getUserData(userId);
+    const targetData = getUserData(target.id);
+
+    const now = Date.now();
+    const cooldown = 15 * 60 * 1000; // 15 دقيقة كولداون بين عمليات النهب
+
+    if (user.lastRob && now - user.lastRob < cooldown) {
+      const remaining = Math.ceil((cooldown - (now - user.lastRob)) / 1000 / 60);
+      await message.reply(`⏳ أنت متطلب فترة راحة بعد عملياتك الأخيرة! انتظر **${remaining} دقائق** قبل محاولة النهب مجدداً.`);
+      return;
+    }
+
+    if (user.balance < 200) {
+      await message.reply('❌ يجب أن تمتلك على الأقل **200 دولار** نقداً للمخاطرة ودفع الغرامات المحتملة للشرطة!');
+      return;
+    }
+
+    if (targetData.balance < 150) {
+      await message.reply('❌ هذا الشخص فقير جداً وليس لديه أموال نقدية كافية لكي تستحق المخاطرة!');
+      return;
+    }
+
+    user.lastRob = now;
+
+    // نسبة النجاح: 45%
+    const success = Math.random() < 0.45;
+
+    if (success) {
+      // سرقة نسبة تتراوح بين 10% إلى 25% من رصيد الضحية النقدي
+      const percent = Math.random() * 0.15 + 0.10; 
+      const stolen = Math.floor(targetData.balance * percent);
+
+      targetData.balance -= stolen;
+      user.balance += stolen;
+
+      data.users[userId] = user;
+      data.users[target.id] = targetData;
+      saveData(data);
+
+      await message.reply(`🦹 **عملية نهب ناجحة!** تسللت ببراعة ونجحت في سرقة **${stolen} دولار** من <@${target.id}>! 💰🔥`);
+    } else {
+      // فشل النهب: دفع غرامة (مثلاً 150 دولار أو نصف الرصيد المتاح بحد أقصى)
+      const fine = Math.min(user.balance, 150);
+      user.balance -= fine;
+
+      data.users[userId] = user;
+      saveData(data);
+
+      await message.reply(`🚨 **فشلت عملية النهب!** قبض عليك الحراس أثناء محاولتك وتم تغريمك بمبلغ **${fine} دولار**! 👮‍♂️❌`);
+    }
     return;
   }
 
@@ -196,7 +406,7 @@ client.on(Events.MessageCreate, async message => {
         { name: '🌾 قمح', value: `${data.market.prices.wheat} $`, inline: true }
       )
       .setColor('#9b59b6')
-      .setFooter({ text: 'الأسعار تتغير دورياً • استخدم !شراء أو !بيع للتداول' });
+      .setFooter({ text: 'الأسعار تتغير دورياً' });
     await message.reply({ embeds: [embed] });
     return;
   }
@@ -208,8 +418,7 @@ client.on(Events.MessageCreate, async message => {
       .setDescription('قائمة العناصر المتاحة للشراء:')
       .addFields(
         { name: '🎟️ بطاقة سحب عشوائي - 500$', value: 'اكتب `!اشتري سحب`' },
-        { name: '🛡️ حماية لمدة يوم - 1000$', value: 'اكتب `!اشتري حماية`' },
-        { name: '💰 قرض سريع - فائدة 10%', value: 'اكتب `!قرض [المبلغ]`' }
+        { name: '🛡️ حماية ضد النهب ليوم - 1000$', value: 'اكتب `!اشتري حماية`' }
       )
       .setColor('#e67e22');
     await message.reply({ embeds: [embed] });
@@ -220,7 +429,7 @@ client.on(Events.MessageCreate, async message => {
   if (content === '!ترتيب' || content === '!الترتيب') {
     const data = readData();
     const users = Object.entries(data.users)
-      .map(([id, u]) => ({ id, total: (u.balance || 0) + (u.bank || 0), name: id }))
+      .map(([id, u]) => ({ id, total: (u.balance || 0) + (u.bank || 0) }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
     
@@ -267,9 +476,9 @@ client.on(Events.InteractionCreate, async interaction => {
           .setDescription(
             `رصيدك النقدي: **${user.balance}** دولار\n` +
             `رصيدك في البنك: **${user.bank}** دولار\n\n` +
-            'اكتب:\n' +
-            '`!إيداع المبلغ` — لوضع المال في البنك\n' +
-            '`!سحب المبلغ` — لاسترداد المال من البنك'
+            'الأوامر المتاحة:\n' +
+            '`!إيداع [المبلغ]` أو `!إيداع الكل`\n' +
+            '`!سحب [المبلغ]` أو `!سحب الكل`'
           )
           .setColor('#1abc9c');
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -325,9 +534,8 @@ client.on(Events.InteractionCreate, async interaction => {
           .setTitle('🎮 الألعاب')
           .setDescription(
             'اختر لعبة:\n\n' +
-            '🎲 `!نرد` — رمي النرد • 2x أرباح\n' +
-            '🎯 `!رهان مبلغ خيار1 خيار2` — رهان بسيط\n' +
-            '🔢 `!تخمين` — تخمين الرقم السري'
+            '🎲 `!نرد` — رمي النرد (يكلف 100$ ويربح الضعف)\n' +
+            '🦹 `!نهب @الشخص` — محاولة سرقة أموال لاعب آخر'
           )
           .setColor('#e74c3c');
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -338,11 +546,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const embed = new EmbedBuilder()
           .setTitle('💼 الوظائف المتاحة')
           .setDescription(
-            'أداء مهام بسيطة لكسب المال:\n\n' +
+            'أداء مهام بسيطة لكسب المال (كل 5 دقائق):\n\n' +
             '⛏️ `!عمل منجم` — 50-150 دولار\n' +
             '🌾 `!عمل مزارع` — 40-120 دولار\n' +
-            '🛒 `!عمل متجر` — 60-180 دولار\n' +
-            '⏳ كل وظيفة متاحة كل 5 دقائق'
+            '🛒 `!عمل متجر` — 60-180 دولار'
           )
           .setColor('#d35400');
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -357,9 +564,7 @@ client.on(Events.InteractionCreate, async interaction => {
           .setDescription(
             `المزادات النشطة حالياً: **${activeAuctions}**\n\n` +
             'الأوامر المتاحة:\n' +
-            '`!مزادات` — عرض المزادات النشطة\n' +
-            '`!مزاد سعر وصف` — إنشاء مزاد جديد\n' +
-            '`!مزايدة المبلغ` — المشاركة في مزاد'
+            '`!مزادات` — عرض المزادات النشطة'
           )
           .setColor('#8e44ad');
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -393,8 +598,7 @@ client.on(Events.InteractionCreate, async interaction => {
           .setDescription(
             'عناصر للشراء:\n\n' +
             '🎟️ سحب عشوائي — 500$ → `!اشتري سحب`\n' +
-            '🛡️ حماية يوم — 1000$ → `!اشتري حماية`\n' +
-            '💰 قرض سريع → `!قرض المبلغ`'
+            '🛡️ حماية يوم — 1000$ → `!اشتري حماية`'
           )
           .setColor('#e67e22');
         await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -405,11 +609,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const embed = new EmbedBuilder()
           .setTitle('🎒 مهماتي')
           .setDescription(
-            'المهام اليومية والأسبوعية:\n\n' +
+            'المهام اليومية:\n\n' +
             '✅ استخدم !يومية يومياً → 250$\n' +
-            '✅ العب لعبة واحدة → 50$\n' +
-            '✅ شارك في مزاد → 200$\n\n' +
-            'تابع إنجازاتك وتسلق الترتيب!'
+            '✅ العب لعبة نرد → 50$\n' +
+            '✅ قم بعمل ناجح عبر `!عمل`'
           )
           .setColor('#16a085');
         await interaction.reply({ embeds: [embed], ephemeral: true });
