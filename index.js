@@ -288,7 +288,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'portfolio': {
         let desc = '📦 محفظة أسهمك:\n\n';
         const portfolioVal = calculatePortfolioValue(userId);
@@ -308,7 +307,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'stocks': {
         let desc = '📈 أسعار الأسهم الحالية:\n\n';
         for (const [sym, stock] of Object.entries(data.stocks)) {
@@ -320,7 +318,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'friends': {
         let desc = '🤝 أصدقاؤك:\n\n';
         const friends = data.friends[userId] || [];
@@ -334,7 +331,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'bank': {
         const embed = new EmbedBuilder()
           .setColor('#9b59b6')
@@ -347,7 +343,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'games': {
         const embed = new EmbedBuilder()
           .setColor('#9b59b6')
@@ -364,7 +359,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'daily': {
         if (now - user.lastDaily >= DAILY_COOLDOWN) {
           user.streak = user.lastDaily && now - user.lastDaily < DAILY_COOLDOWN + 6 * 60 * 60 * 1000 ? (user.streak || 0) + 1 : 1;
@@ -386,7 +380,6 @@ client.on(Events.InteractionCreate, async interaction => {
         }
         break;
       }
-
       case 'achievements': {
         let desc = '🏆 إنجازاتك:\n\n';
         for (const [id, ach] of Object.entries(ACHIEVEMENTS_LIST)) {
@@ -397,7 +390,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await interaction.reply({ embeds: [embed], ephemeral: false });
         break;
       }
-
       case 'help': {
         const embed = new EmbedBuilder()
           .setColor('#95a5a6')
@@ -750,7 +742,7 @@ client.on(Events.MessageCreate, async message => {
   // ========== 🎮 الألعاب ==========
   
   // === 🎲 النرد ===
-  if (cmd === '!نرد' || cmd === '!نرد') {
+  if (cmd === '!نرد') {
     const bet = parseInt(args[1]);
     if (isNaN(bet) || bet <= 0 || bet > user.balance) {
       await message.reply('❌ استخدم: `!نرد 50`');
@@ -798,9 +790,9 @@ client.on(Events.MessageCreate, async message => {
   }
 
   // === ✊ حجر ورق مقص ===
-  if (cmd === '!حجر' || cmd === '!ورق' || cmd === '!مقص') {
+  if (['!حجر', '!ورق', '!مقص'].includes(cmd)) {
     const bet = parseInt(args[1]);
-    const choice = (args[2] || cmd.replace('!', '')).toLowerCase();
+    const choice = args[2] || cmd.slice(1);
     const validChoices = ['حجر', 'ورق', 'مقص'];
     if (isNaN(bet) || bet <= 0 || bet > user.balance || !validChoices.includes(choice)) {
       await message.reply('❌ استخدم: `!حجر 50 حجر` أو `!حجر 50 ورق` أو `!حجر 50 مقص`');
@@ -876,7 +868,7 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  // === ⛏️ تنقيب الذهب ===
+   // === ⛏️ تنقيب الذهب ===
   if (cmd === '!تنقيب' || cmd === '!منجم') {
     const finds = [
       { name: 'ذهب خالص', emoji: '🥇', reward: 150 },
@@ -892,4 +884,22 @@ client.on(Events.MessageCreate, async message => {
       user.balance += found.reward;
       user.stats.gamesWon++;
       checkAchievements(userId);
-      await message.reply(`⛏️ **بدأت
+      await message.reply(`⛏️ **بدأت الحفر في المنجم...**\n\n${found.emoji} وجدت: **${found.name}**!\n💰 ربحت: **${found.reward} دينار** ✅`);
+    } else {
+      await message.reply(`⛏️ **بدأت الحفر في المنجم...**\n\n${found.emoji} لم تجد شيئاً ذا قيمة 😔 حاول مجدداً!`);
+    }
+    saveData();
+    return;
+  }
+});
+
+// ========== تشغيل البوت ==========
+loadData();
+
+client.login(TOKEN)
+  .then(() => console.log('✅ البوت متصل بنجاح!'))
+  .catch(err => console.error('❌ خطأ في تسجيل الدخول:', err));
+
+client.on('ready', () => {
+  console.log(`✅ ${client.user.tag} جاهز للعمل!`);
+});
