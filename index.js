@@ -53,7 +53,10 @@ let data = { users: {}, lotteries: {} };
 function loadData() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      // دمج البيانات القديمة مع الهيكل الجديد
+      data.users = saved.users || {};
+      data.lotteries = saved.lotteries || {};
       console.log('✅ تم تحميل البيانات بنجاح');
     } else {
       data = { users: {}, lotteries: {} };
@@ -111,6 +114,9 @@ const LOTTERY_DRAW_TIME = 60 * 60 * 1000;
 
 // ========== نظام اليانصيب ==========
 function initLottery() {
+  if (!data.lotteries) {
+    data.lotteries = {};
+  }
   if (!data.lotteries.current) {
     data.lotteries.current = {
       participants: [],
@@ -318,8 +324,8 @@ client.on(Events.InteractionCreate, async interaction => {
       case 'crime': {
         const embed = new EmbedBuilder()
           .setColor('#34495e')
-          .setDescription('أوامر ممتعة لكسب المال بشكل عشوائي')
           .setTitle('🎭 مغامرات يومية')
+          .setDescription('أوامر ممتعة لكسب المال بشكل عشوائي')
           .addFields(
             { name: '🏃 مهمة مخاطرة', value: 'اكتب: !مهمة — ربح أو غرامة', inline: false },
             { name: '🎣 صيد السمك', value: 'اكتب: !صيد — اصطد واربح', inline: false },
